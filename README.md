@@ -1,5 +1,7 @@
 # 📄 scikick
 
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-Buy%20me%20a%20coffee-ff5e5b?logo=ko-fi)](https://ko-fi.com/scikick)
+
 An AI research companion — Chrome extension + local server. Brainstorm ideas, discuss your scientific writing, analyze data, and navigate peer review. Works with any scientific field.
 
 ## What it does
@@ -308,6 +310,12 @@ This is normal for a local app. Click "Advanced" → "Go to scikick (unsafe)" to
 - **Name figures clearly** — `fig2_main_results.png` is better than `IMG_4829.png`
 - **Keep the server running** — it's lightweight and stateless between requests
 - **The memory file is human-readable** — you can inspect or edit `.scikick_memory.json` in your Drive folder
+
+## Support
+
+## Support
+
+If scikick saves you time on your research, [buy me a coffee on Ko-fi](https://ko-fi.com/scikick) ☕. It helps cover development time and keeps the tool free for everyone.
 
 ## License
 
