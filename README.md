@@ -196,7 +196,7 @@ Same as above — clone the code, run `./start.sh --setup` on the new machine (y
 - **Never commit `google_credentials.json`, `google_token.json`, or `.env`** — they contain secrets
 - `.gitignore` already excludes these
 - Each person should use their own Google Cloud OAuth client and API key
-- Local data (`~/.scientific-paper-assistant/`) contains tokens — don't share that folder
+- Local data (`~/.scikick/`) contains tokens — don't share that folder
 
 ---
 
@@ -219,7 +219,7 @@ These are saved to `.env` by the setup wizard.
 |----------|---------|-------------|
 | `REVISION_HOST` | `127.0.0.1` | Server bind address |
 | `REVISION_PORT` | `8742` | Server port |
-| `GOOGLE_CREDENTIALS` | `~/.scientific-paper-assistant/google_credentials.json` | Path to Google OAuth credentials |
+| `GOOGLE_CREDENTIALS` | `~/.scikick/google_credentials.json` | Path to Google OAuth credentials |
 
 ### Switching providers later
 

@@ -49,7 +49,7 @@ install_deps() {
 }
 
 google_credentials_setup() {
-    CREDS_DIR="$HOME/.scientific-paper-assistant"
+    CREDS_DIR="$HOME/.scikick"
     mkdir -p "$CREDS_DIR"
     CREDS_FILE="$CREDS_DIR/google_credentials.json"
 
@@ -470,8 +470,8 @@ first_time_setup() {
 
 install_service() {
     PLIST="$HOME/Library/LaunchAgents/com.scikick.server.plist"
-    LOG_FILE="$HOME/.scientific-paper-assistant/server.log"
-    ERR_FILE="$HOME/.scientific-paper-assistant/server.err"
+    LOG_FILE="$HOME/.scikick/server.log"
+    ERR_FILE="$HOME/.scikick/server.err"
 
     echo ""
     echo -e "${BLUE}Installing background service…${NC}"
@@ -480,7 +480,7 @@ install_service() {
     echo ""
 
     mkdir -p "$HOME/Library/LaunchAgents"
-    mkdir -p "$HOME/.scientific-paper-assistant"
+    mkdir -p "$HOME/.scikick"
 
     cat > "$PLIST" << EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -577,7 +577,7 @@ start_server() {
     echo ""
 
     # ── First-run onboarding (skip if already set up) ──
-    TOKEN_FILE="$HOME/.scientific-paper-assistant/google_token.json"
+    TOKEN_FILE="$HOME/.scikick/google_token.json"
     if [ ! -f "$TOKEN_FILE" ]; then
         # Extension loading guide (first time only)
         if [ -f "$SCRIPT_DIR/install-extension.sh" ]; then
@@ -592,7 +592,7 @@ start_server() {
         fi
 
         # Google auth reminder
-        CREDS_FILE="$HOME/.scientific-paper-assistant/google_credentials.json"
+        CREDS_FILE="$HOME/.scikick/google_credentials.json"
         if [ -f "$CREDS_FILE" ]; then
             echo -e "${YELLOW}Authenticate with Google:${NC}"
             echo "  → Visit http://localhost:8742/drive/auth/url"

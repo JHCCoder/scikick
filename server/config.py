@@ -20,18 +20,18 @@ PORT = int(os.getenv("REVISION_PORT", "8742"))
 # Paths
 # ---------------------------------------------------------------------------
 PROJECT_ROOT = Path(__file__).parent.parent
-LOCAL_CACHE_DIR = Path.home() / ".scientific-paper-assistant" / "cache"
+LOCAL_CACHE_DIR = Path.home() / ".scikick" / "cache"
 
 # ---------------------------------------------------------------------------
 # Google Drive
 # ---------------------------------------------------------------------------
 GOOGLE_CREDENTIALS_FILE = os.getenv(
     "GOOGLE_CREDENTIALS",
-    str(Path.home() / ".scientific-paper-assistant" / "google_credentials.json"),
+    str(Path.home() / ".scikick" / "google_credentials.json"),
 )
 GOOGLE_TOKEN_FILE = os.getenv(
     "GOOGLE_TOKEN",
-    str(Path.home() / ".scientific-paper-assistant" / "google_token.json"),
+    str(Path.home() / ".scikick" / "google_token.json"),
 )
 GOOGLE_SCOPES = [
     "https://www.googleapis.com/auth/drive.readonly",  # list/download your existing files
