@@ -1,5 +1,5 @@
 /**
- * PhiDkick — Side Panel Chat UI
+ * scikick — Side Panel Chat UI
  * Connects to the local server at localhost:8742
  */
 
@@ -264,7 +264,7 @@ async function checkExistingSession() {
         // Restore project state
         if (mem.project_folder_id) {
           dom.driveInput.value = mem.project_folder_id;
-          dom.projectName.textContent = mem.project_folder_name || "PhiDkick";
+          dom.projectName.textContent = mem.project_folder_name || "scikick";
 
           // Store project folder ID for tab matching
           projectFolderId = mem.project_folder_id;

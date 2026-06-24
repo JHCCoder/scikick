@@ -1,4 +1,4 @@
-# 📄 PhiDkick
+# 📄 scikick
 
 An AI research companion — Chrome extension + local server. Brainstorm ideas, discuss your scientific writing, analyze data, and navigate peer review. Works with any scientific field.
 
@@ -99,7 +99,7 @@ Visit [http://localhost:8742/drive/auth/url](http://localhost:8742/drive/auth/ur
 
 ### 5. Load a project and start chatting
 
-1. Click the PhiDkick icon 📄 in your Chrome toolbar to open the side panel
+1. Click the scikick icon 📄 in your Chrome toolbar to open the side panel
 2. Paste your Google Drive folder URL (or ID):
    ```
    https://drive.google.com/drive/folders/1abc123...
@@ -167,7 +167,7 @@ You can also use a **Google Sheet** for reviewer comments — the system auto-de
 
 ## Sharing with Labmates
 
-Each person needs their own setup — PhiDkick runs locally and uses personal API keys and Google credentials.
+Each person needs their own setup — scikick runs locally and uses personal API keys and Google credentials.
 
 ### For a labmate setting up from scratch
 
@@ -278,7 +278,7 @@ Make sure the server is running (`./start.sh`). The status dot in the top bar sh
 Make sure you created an OAuth client ID of type "Desktop application" (not "Web application"). Re-run `./start.sh --setup` to redo the credentials.
 
 **"This app isn't verified" warning during Google sign-in**
-This is normal for a local app. Click "Advanced" → "Go to PhiDkick (unsafe)" to continue. You added yourself as a test user during setup, so this works.
+This is normal for a local app. Click "Advanced" → "Go to scikick (unsafe)" to continue. You added yourself as a test user during setup, so this works.
 
 ---
 

@@ -1,5 +1,5 @@
 /**
- * Service worker for PhiDkick.
+ * Service worker for scikick.
  * - Keeps the side panel pinned
  * - Relays active-tab info to the side panel (side panels can't read tab URLs directly)
  */

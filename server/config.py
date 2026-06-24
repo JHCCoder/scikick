@@ -1,4 +1,4 @@
-"""Configuration for the PhiDkick server."""
+"""Configuration for the scikick server."""
 
 import os
 from pathlib import Path

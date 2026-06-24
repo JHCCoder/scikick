@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PhiDkick — One-command launcher
+# scikick — One-command launcher
 #
 # Usage:
 #   ./start.sh                    # Start the server
@@ -28,7 +28,7 @@ NC='\033[0m' # No Color
 banner() {
     echo -e "${GREEN}"
     echo "  ╔═══════════════════════════════════════╗"
-    echo "  ║         📄 PhiDkick 📄               ║"
+    echo "  ║         📄 scikick 📄               ║"
     echo "  ║   AI research companion              ║"
     echo "  ╚═══════════════════════════════════════╝"
     echo -e "${NC}"
@@ -85,7 +85,7 @@ except:
     echo -e "${BLUE}  Google Drive Setup${NC}"
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    echo "PhiDkick needs access to your Google Drive to load your papers."
+    echo "scikick needs access to your Google Drive to load your papers."
     echo "I'll walk you through this in ~5 minutes."
     echo "You'll need a Google account (any Gmail works)."
     echo ""
@@ -154,7 +154,7 @@ except:
     echo "    Click 'GET STARTED'."
     echo ""
     echo "  On the form that appears:"
-    echo "  → App name:        PhiDkick"
+    echo "  → App name:        scikick"
     echo "  → User support:    your email address"
     echo "  → Developer contact: your email address"
     echo "  → Click 'SAVE AND CONTINUE'"
@@ -188,7 +188,7 @@ except:
     echo ""
     echo "  → Click '+ CREATE CREDENTIALS' (top) → 'OAuth client ID'"
     echo "  → Application type: 'Desktop application'"
-    echo "  → Name: 'PhiDkick Desktop'"
+    echo "  → Name: 'scikick Desktop'"
     echo "  → Click 'CREATE'"
     echo "  → In the popup, click 'DOWNLOAD JSON'"
     read -r -p "Press Enter after downloading the JSON file…"
@@ -198,7 +198,7 @@ except:
     echo -e "${YELLOW}Step 6/6: Installing your credentials${NC}"
     echo ""
     echo "  We need to copy the JSON file you just downloaded into the location"
-    echo "  where PhiDkick expects it:"
+    echo "  where scikick expects it:"
     echo -e "    ${GREEN}$CREDS_FILE${NC}"
     echo ""
     echo "  The file is named something like 'client_secret_XXXXXXXXXXXX.json'"
@@ -327,7 +327,7 @@ except Exception as e:
 }
 
 first_time_setup() {
-    echo -e "${YELLOW}PhiDkick Setup Wizard${NC}"
+    echo -e "${YELLOW}scikick Setup Wizard${NC}"
     echo ""
 
     # Check if LLM is already configured (has .env with API key)
@@ -469,7 +469,7 @@ first_time_setup() {
 }
 
 install_service() {
-    PLIST="$HOME/Library/LaunchAgents/com.phidkick.server.plist"
+    PLIST="$HOME/Library/LaunchAgents/com.scikick.server.plist"
     LOG_FILE="$HOME/.scientific-paper-assistant/server.log"
     ERR_FILE="$HOME/.scientific-paper-assistant/server.err"
 
@@ -489,7 +489,7 @@ install_service() {
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.phidkick.server</string>
+    <string>com.scikick.server</string>
     <key>ProgramArguments</key>
     <array>
         <string>$SCRIPT_DIR/start.sh</string>
@@ -510,7 +510,7 @@ install_service() {
 EOF
 
     # Stop any existing instance
-    launchctl bootout gui/$(id -u)/com.phidkick.server 2>/dev/null || true
+    launchctl bootout gui/$(id -u)/com.scikick.server 2>/dev/null || true
     launchctl unload "$PLIST" 2>/dev/null || true
 
     # Load the service
@@ -542,10 +542,10 @@ EOF
 }
 
 uninstall_service() {
-    PLIST="$HOME/Library/LaunchAgents/com.phidkick.server.plist"
+    PLIST="$HOME/Library/LaunchAgents/com.scikick.server.plist"
 
     echo "Stopping background service…"
-    launchctl bootout gui/$(id -u)/com.phidkick.server 2>/dev/null || \
+    launchctl bootout gui/$(id -u)/com.scikick.server 2>/dev/null || \
     launchctl unload "$PLIST" 2>/dev/null || true
 
     rm -f "$PLIST"

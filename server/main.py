@@ -1,4 +1,4 @@
-"""PhiDkick — Local server entry point."""
+"""scikick — Local server entry point."""
 
 import logging
 from contextlib import asynccontextmanager
@@ -21,15 +21,15 @@ logger = logging.getLogger("paper-assistant")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup/shutdown hooks."""
-    logger.info("Starting PhiDkick server...")
+    logger.info("Starting scikick server...")
     # Pre-load any persisted state from local cache (Drive memory sync
     # happens when a project folder is connected).
     yield
-    logger.info("Shutting down PhiDkick server.")
+    logger.info("Shutting down scikick server.")
 
 
 app = FastAPI(
-    title="PhiDkick",
+    title="scikick",
     description="AI research companion for brainstorming, writing, and analysis with Google Drive sync",
     version="0.1.0",
     lifespan=lifespan,

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PhiDkick — Chrome extension loading helper
+# scikick — Chrome extension loading helper
 #
 # Usage:
 #   ./install-extension.sh
@@ -19,7 +19,7 @@ NC=$'\033[0m'
 
 echo ""
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BLUE}  Load the PhiDkick Chrome Extension${NC}"
+echo -e "${BLUE}  Load the scikick Chrome Extension${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
@@ -95,7 +95,7 @@ echo ""
 echo "  4. Select this folder (path is in your clipboard — paste it):"
 echo -e "     ${GREEN}$EXTENSION_DIR${NC}"
 echo ""
-echo "  5. The PhiDkick icon 📄 appears in your toolbar — pin it!"
+echo "  5. The scikick icon 📄 appears in your toolbar — pin it!"
 echo ""
 
 # ── Open extensions page ──
@@ -108,5 +108,5 @@ if command -v open &>/dev/null; then
 fi
 
 echo ""
-echo -e "${GREEN}Done! Click the PhiDkick icon in your toolbar to open the side panel.${NC}"
+echo -e "${GREEN}Done! Click the scikick icon in your toolbar to open the side panel.${NC}"
 echo ""
