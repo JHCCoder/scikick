@@ -12,8 +12,8 @@
     <div id="status-dot" class="status-disconnected" title="Server status"></div>
     <h1 id="project-name">PhiDkick</h1>
     <button id="btn-settings" title="LLM Settings">⚙</button>
-    <button id="btn-refresh" title="Refresh connection">⟳</button>
-    <button id="btn-clear" title="Clear chat">✕</button>
+    <button id="btn-clear" title="Clear chat">—</button>
+    <button id="btn-power" title="Restart session">⟳</button>
   </header>
 
   <!-- Settings Panel (hidden by default) -->
@@ -61,7 +61,7 @@
   </div>
 
   <!-- Project Selector -->
-  <div id="project-bar">
+  <div id="project-bar" class="hidden">
     <input type="text" id="drive-folder-input"
            placeholder="Paste Google Drive folder ID or URL..."
            title="The Google Drive folder containing your paper and reviewer comments">
@@ -89,12 +89,9 @@
             <li>Analyze data, figures, and results</li>
             <li>Navigate and respond to peer review</li>
           </ul>
-          <p>To get started, paste your Google Drive folder ID above and click <strong>Load Project</strong>.</p>
+          <p>You can start chatting right away, or paste a Google Drive folder ID above and click <strong>Load Project</strong> to work with your paper and reviewer comments.</p>
         </div>
       </div>
-    </div>
-    <div id="typing-indicator" class="hidden">
-      <span class="dot"></span><span class="dot"></span><span class="dot"></span>
     </div>
   </main>
 
@@ -113,7 +110,7 @@
       <div id="input-wrapper">
         <div id="resize-handle" title="Drag to resize">⋮⋮</div>
         <textarea id="chat-input" rows="2"
-                  placeholder="Ask about a reviewer comment, or draft a response..."
+                  placeholder="Ask me anything — brainstorm, write, analyze, or discuss your research..."
                   disabled></textarea>
       </div>
       <button id="btn-send" disabled title="Send message (Enter)">

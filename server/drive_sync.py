@@ -429,7 +429,7 @@ async def load_context(folder_id: str, force: bool = False):
         extract_reviewer_comments,
         extract_reviewer_comments_from_sheets,
     )
-    from chat_handler import set_project_context, _current_doc, _current_comments
+    from chat_handler import set_project_context, _current_doc, _current_comments, _current_doc_source
 
     # 1. Initialise or retrieve memory
     from memory_manager import (
@@ -480,7 +480,10 @@ async def load_context(folder_id: str, force: bool = False):
 
     unchanged_ids = set(current_snapshots) - changed_ids - new_ids - {memory_file}
 
-    if not force and not new_ids and not changed_ids and _current_doc is not None:
+    # Only skip re-parse if the current doc actually came from THIS folder
+    # (a scraped webpage would have a different source and must be replaced)
+    same_folder = _current_doc_source == f"drive:{folder_id}"
+    if not force and not new_ids and not changed_ids and _current_doc is not None and same_folder:
         logger.info("load-context: no files changed — skipping re-parse")
         return {
             "status": "unchanged",
@@ -608,7 +611,7 @@ async def load_context(folder_id: str, force: bool = False):
     logger.info("load-context: %d images cached (%d new/changed)", len(images), len(changed_images))
 
     # 7. Load into chat handler
-    set_project_context(doc, comments, images)
+    set_project_context(doc, comments, images, source=f"drive:{folder_id}")
 
     # 8. Update memory with paper sections, comment states, and file snapshots
     update_paper_sections([

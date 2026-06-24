@@ -19,8 +19,10 @@ let projectLoaded = false;
 let projectFiles = []; // {id, name, mimeType} — files in the loaded project
 let projectFolderId = null; // Drive folder ID of the loaded project
 let viewingFile = null; // {name, id} — project file currently open in a browser tab
+let currentTabUrl = null; // URL of the currently active browser tab
 let sessionFocus = null; // "brainstorming" | "paper_discussion" | "paper_writing" | "revision" | "other"
 let currentStream = null; // AbortController for SSE
+let loadingInProgress = false; // true during loadProject / scrape — suppress disconnect banner
 let bgPort = null; // Port to background service worker (keep-alive only)
 
 // ---------------------------------------------------------------------------
@@ -42,8 +44,8 @@ const dom = {
   contextHint: $("#context-hint"),
   chatInput: $("#chat-input"),
   btnSend: $("#btn-send"),
-  btnRefresh: $("#btn-refresh"),
   btnClear: $("#btn-clear"),
+  btnPower: $("#btn-power"),
   btnConnect: $("#btn-connect"),
   btnCopyCmd: $("#btn-copy-cmd"),
   cmdText: $("#cmd-text"),
@@ -96,6 +98,11 @@ async function checkServerHealth() {
 }
 
 function setServerStatus(status) {
+  // Don't flash the "disconnected" banner while a long-running
+  // operation (project load, scrape) is in progress — the server
+  // is busy, not down.
+  if (status === "disconnected" && loadingInProgress) return;
+
   serverConnected = status === "connected";
   dom.statusDot.className = `status-${status}`;
   dom.statusDot.title = `Server: ${status}`;
@@ -104,6 +111,9 @@ function setServerStatus(status) {
     dom.connectBanner.style.display = "none";
     dom.driveInput.disabled = false;
     dom.btnLoad.disabled = !dom.driveInput.value.trim();
+    // Enable chat regardless of whether a project is loaded
+    dom.chatInput.disabled = false;
+    dom.btnSend.disabled = false;
   } else {
     dom.connectBanner.style.display = "block";
     dom.driveInput.disabled = true;
@@ -119,6 +129,9 @@ async function connect() {
   if (ok) {
     // Show active provider
     await showProviderInfo();
+    // Show onboarding options immediately so the user can pick an interaction type
+    // before loading a project
+    if (!sessionFocus) showOnboardingOptions();
     // Check for existing session
     await checkExistingSession();
   }
@@ -306,6 +319,7 @@ async function loadProject() {
 
   dom.btnLoad.disabled = true;
   dom.btnLoad.textContent = "Loading...";
+  loadingInProgress = true;
 
   try {
     // Use the resume endpoint — it loads files AND restores memory in one call
@@ -411,6 +425,7 @@ async function loadProject() {
   } catch (e) {
     showSystemMessage(`❌ **Error loading project:** ${e.message}`);
   } finally {
+    loadingInProgress = false;
     dom.btnLoad.disabled = false;
     dom.btnLoad.textContent = "Load Project";
   }
@@ -430,7 +445,7 @@ dom.chatInput.addEventListener("keydown", (e) => {
 
 async function sendMessage() {
   const text = dom.chatInput.value.trim();
-  if (!text || !projectLoaded) return;
+  if (!text) return;
 
   // Clear input
   dom.chatInput.value = "";
@@ -438,9 +453,6 @@ async function sendMessage() {
 
   // Show user message
   addMessage("user", text);
-
-  // Show typing indicator
-  setTyping(true);
 
   // Abort any existing stream
   if (currentStream) {
@@ -450,6 +462,8 @@ async function sendMessage() {
 
   try {
     const assistantBubble = addMessage("assistant", "", true);
+    // Show typing dots inside the empty assistant bubble
+    assistantBubble.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
     let fullResponse = "";
 
     const res = await fetch(`${SERVER_URL}/chat/send`, {
@@ -517,7 +531,6 @@ async function sendMessage() {
       addMessage("system", `❌ ${e.message}`);
     }
   } finally {
-    setTyping(false);
     currentStream = null;
   }
 }
@@ -672,7 +685,6 @@ function setTyping(visible) {
 // ---------------------------------------------------------------------------
 
 async function updateContextUsage() {
-  if (!projectLoaded) return;
   try {
     const res = await fetch(`${SERVER_URL}/chat/context-usage`);
     if (res.ok) {
@@ -698,7 +710,10 @@ async function updateContextUsage() {
 }
 
 async function refreshContext() {
-  if (!projectLoaded) return;
+  if (!projectLoaded) {
+    showSystemMessage("💡 Load a project first to enable context management. You can still chat without one!");
+    return;
+  }
   dom.btnRefreshCtx.disabled = true;
   dom.btnRefreshCtx.textContent = "⏳";
 
@@ -729,13 +744,35 @@ async function refreshContext() {
 // UI Helpers
 // ---------------------------------------------------------------------------
 
-dom.btnRefresh.addEventListener("click", connect);
 dom.btnClear.addEventListener("click", () => {
   dom.messages.innerHTML = "";
   showSystemMessage("Chat cleared. I still remember your project context.");
 });
 
 dom.btnConnect.addEventListener("click", connect);
+
+// Restart session — wipe chat, scraped content, and re-show onboarding
+dom.btnPower.addEventListener("click", async () => {
+  dom.btnPower.classList.add("spinning");
+
+  // Clear scraped papers on the server
+  if (serverConnected) {
+    try {
+      await fetch(`${SERVER_URL}/chat/scraped`, { method: "DELETE" });
+    } catch (e) { /* ignore */ }
+  }
+
+  // Wipe chat
+  dom.messages.innerHTML = "";
+
+  // Reset session focus so onboarding options reappear
+  sessionFocus = null;
+
+  // Show the "What would you like to work on today?" options
+  showOnboardingOptions();
+
+  setTimeout(() => dom.btnPower.classList.remove("spinning"), 600);
+});
 
 // Settings panel
 dom.btnSettings.addEventListener("click", openSettings);
@@ -848,6 +885,7 @@ function domainLabel(url) {
 function updateTabBar(tab) {
   if (!tab || !tab.url) {
     dom.tabBar.classList.add("hidden");
+    dom.projectBar.classList.add("hidden");
     viewingFile = null;
     return;
   }
@@ -855,6 +893,7 @@ function updateTabBar(tab) {
   // Skip chrome:// and extension pages
   if (tab.url.startsWith("chrome://") || tab.url.startsWith("chrome-extension://")) {
     dom.tabBar.classList.add("hidden");
+    dom.projectBar.classList.add("hidden");
     viewingFile = null;
     return;
   }
@@ -862,28 +901,38 @@ function updateTabBar(tab) {
   dom.tabBar.classList.remove("hidden");
   viewingFile = null;
 
+  // Default: hide project bar — only show for Drive folders
+  dom.projectBar.classList.add("hidden");
+
   // Check for Google Drive URLs
   const driveInfo = parseDriveUrl(tab.url);
   if (driveInfo) {
     dom.tabBar.classList.add("drive-tab");
 
     if (driveInfo.type === "folder") {
+      // Drive folder — show the project bar for loading
+      dom.projectBar.classList.remove("hidden");
       dom.tabIcon.textContent = "📁";
       // Check if this is the project folder itself
       if (projectFolderId && driveInfo.id === projectFolderId) {
         dom.tabTitle.textContent = "Project folder";
         dom.tabBar.classList.add("viewing-project-file");
         dom.btnUseTab.classList.add("hidden"); // already loaded
+        delete dom.btnUseTab.dataset.folderId;
+        delete dom.btnUseTab.dataset.scrapeUrl;
       } else {
         dom.tabTitle.textContent = tab.title || "Untitled";
         dom.tabBar.classList.remove("viewing-project-file");
         dom.btnUseTab.classList.remove("hidden");
-        dom.btnUseTab.textContent = "Load this folder";
+        dom.btnUseTab.textContent = "Use this folder";
+        delete dom.btnUseTab.dataset.scrapeUrl;
         dom.btnUseTab.dataset.folderId = driveInfo.id;
       }
     } else {
       // It's a Drive file — check if it belongs to the loaded project
       dom.btnUseTab.classList.add("hidden");
+      delete dom.btnUseTab.dataset.folderId;
+      delete dom.btnUseTab.dataset.scrapeUrl;
       const match = projectFiles.find(f => f.id === driveInfo.id);
       if (match) {
         dom.tabIcon.textContent = "📄";
@@ -897,9 +946,14 @@ function updateTabBar(tab) {
       }
     }
   } else {
-    dom.tabIcon.textContent = "📄";
+    // Non-Drive webpage — offer to scrape it as a paper
+    dom.tabIcon.textContent = "🌐";
     dom.tabBar.classList.remove("drive-tab", "viewing-project-file");
-    dom.btnUseTab.classList.add("hidden");
+    currentTabUrl = tab.url;
+    dom.btnUseTab.classList.remove("hidden");
+    dom.btnUseTab.textContent = "Scrape this page";
+    delete dom.btnUseTab.dataset.folderId;
+    dom.btnUseTab.dataset.scrapeUrl = tab.url;
     dom.tabTitle.textContent = tab.title || "Untitled";
   }
 
@@ -939,16 +993,87 @@ async function detectCurrentTab(retries = 3) {
   viewingFile = null;
 }
 
-/** Wire up the "Load this folder" button to pre-fill the Drive input */
+/** Wire up the tab action button (load folder or scrape page) */
 function initTabBar() {
   console.log("[TabBar] Initializing tab bar...");
 
-  dom.btnUseTab.addEventListener("click", () => {
+  dom.btnUseTab.addEventListener("click", async () => {
+    // "Load this folder" mode
     const folderId = dom.btnUseTab.dataset.folderId;
     if (folderId) {
       dom.driveInput.value = folderId;
       dom.driveInput.dispatchEvent(new Event("input")); // trigger validation
       dom.driveInput.scrollIntoView({ behavior: "smooth" });
+      return;
+    }
+
+    // "Scrape this page" mode
+    const scrapeUrl = dom.btnUseTab.dataset.scrapeUrl;
+    if (scrapeUrl) {
+      dom.btnUseTab.disabled = true;
+      dom.btnUseTab.textContent = "Scraping...";
+      loadingInProgress = true;
+      showSystemMessage(`🔍 Scraping paper from ${new URL(scrapeUrl).hostname}...`);
+
+      try {
+        // Extract the page HTML from the active tab using the user's
+        // authenticated browser session (avoids 403 on journal sites).
+        const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+        if (!tab || !tab.id) throw new Error("No active tab found");
+
+        // chrome.scripting requires the "scripting" permission (added in
+        // manifest.json). Reload the extension if this fails.
+        let pageHtml = "";
+        try {
+          const results = await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            func: () => document.documentElement.outerHTML,
+          });
+          pageHtml = results[0]?.result || "";
+        } catch (scriptErr) {
+          throw new Error(
+            `Cannot read page content. Make sure the extension was reloaded ` +
+            `after the latest update (chrome://extensions → ↻).\n\n` +
+            `Details: ${scriptErr.message}`
+          );
+        }
+
+        if (!pageHtml || pageHtml.length < 500) {
+          throw new Error("Page content is empty or too short — the page may not have finished loading.");
+        }
+
+        const res = await fetch(`${SERVER_URL}/chat/scrape`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: scrapeUrl, html: pageHtml }),
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ detail: res.statusText }));
+          throw new Error(err.detail || "Scrape failed");
+        }
+
+        const data = await res.json();
+        const paperCount = data.scraped_count || 1;
+        showSystemMessage(
+          `✅ **Paper scraped successfully** (${paperCount} paper${paperCount > 1 ? "s" : ""} in context)\n\n` +
+          `📄 **Title**: ${data.title}\n` +
+          `📝 **Sections**: ${data.sections.join(", ") || "Body only"}\n` +
+          `📊 **Content**: ~${Math.round(data.full_text_length / 1000)}k characters, ${data.abstract_length} char abstract\n\n` +
+          `The paper is now loaded in your chat context. You can ask me anything about it.`
+        );
+
+        projectLoaded = true;
+        dom.projectName.textContent = data.title || "Scraped Paper";
+        updateContextUsage();
+
+      } catch (e) {
+        showSystemMessage(`❌ **Scrape failed:** ${e.message}\n\nTry loading the paper via Google Drive instead.`);
+      } finally {
+        loadingInProgress = false;
+        dom.btnUseTab.disabled = false;
+        dom.btnUseTab.textContent = "Scrape this page";
+      }
     }
   });
 

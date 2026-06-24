@@ -13,56 +13,61 @@ An AI research companion — Chrome extension + local server. Brainstorm ideas, 
 ## Architecture
 
 ```
-Chrome Extension (side panel) ←→ Local Server (localhost:8742) ←→ Google Drive API + Claude API
+Chrome Extension (side panel) ↔ Local Server (localhost:8742) ↔ Google Drive API + LLM API
 ```
 
-- **Server**: Python/FastAPI, runs on your Mac
+- **Server**: Python/FastAPI
 - **Extension**: Chrome Manifest V3 side panel
 - **Memory**: `.paper-assistant-memory.json` stored in your Google Drive project folder
-- **AI**: Anthropic Claude (streaming via SSE)
+- **AI**: Multi-provider — Anthropic Claude, DeepSeek, OpenAI, or any OpenAI-compatible API
+
+---
 
 ## Quick Start
 
 ### Prerequisites
 
-- **Python 3.10+** (macOS comes with Python 3)
-- **Chrome or Chromium** browser
-- **LLM API key** — from one of the supported providers (see below)
-- **Google Cloud project** with Drive API enabled (for Google Drive access)
+- **Python 3.10+**
+- **Chrome** (or Chromium-based browser: Edge, Brave, Arc)
+- **LLM API key** from one of the supported providers (see below)
+- **Google account** (any Gmail) — for Google Drive access
 
 ### Supported LLM Providers
 
-| Provider | Env vars | Default model |
-|----------|----------|---------------|
-| **Anthropic (Claude)** | `LLM_API_KEY` or `ANTHROPIC_API_KEY` | `claude-sonnet-4-6` |
-| **DeepSeek** | `LLM_API_KEY` or `DEEPSEEK_API_KEY` | `deepseek-chat` |
-| **OpenAI (GPT-4o)** | `LLM_API_KEY` or `OPENAI_API_KEY` | `gpt-4o` |
-| **Custom** (Ollama, Groq, Together, etc.) | `LLM_API_KEY` + `LLM_BASE_URL` | Any |
+| Provider | Get API key at | Default model |
+|----------|---------------|---------------|
+| **Anthropic (Claude)** | [console.anthropic.com](https://console.anthropic.com/) | `claude-sonnet-4-6` |
+| **DeepSeek** | [platform.deepseek.com](https://platform.deepseek.com/) | `deepseek-chat` |
+| **OpenAI (GPT-4o)** | [platform.openai.com](https://platform.openai.com/) | `gpt-4o` |
+| **Custom** (Ollama, Groq, Together, etc.) | Your provider | Any |
 
-Set the provider via:
-```bash
-export LLM_PROVIDER=deepseek        # or anthropic, openai, custom
-export LLM_API_KEY=sk-...           # your API key
-export LLM_MODEL=deepseek-chat      # optional, defaults shown above
-```
-
-### 1. Setup
+### 1. Run the setup wizard
 
 ```bash
 cd scientific-paper-assistant
 ./start.sh --setup
 ```
 
-The setup wizard will:
-- Let you choose your LLM provider (Anthropic, DeepSeek, OpenAI, or custom)
-- Prompt for the corresponding API key
-- Let you pick a model name
-- Guide you through Google Cloud credential setup
+The wizard walks you through:
+- Choosing your LLM provider and entering your API key
+- Setting up Google Drive access (auto-opens each Google Cloud Console page for you, scans your Downloads for the credentials file, validates everything)
+
+**This takes ~5 minutes** — most of that is clicking buttons in Google Cloud Console tabs that the wizard opens for you.
 
 ### 2. Start the server
 
+The setup wizard asks if you want the server to start automatically on login (recommended). If you said yes, you're done — just click the extension.
+
+Otherwise, start it manually:
+
 ```bash
 ./start.sh
+```
+
+Or install the background service later:
+
+```bash
+./start.sh --install-service
 ```
 
 You should see:
@@ -76,31 +81,31 @@ You should see:
 
 ### 3. Load the Chrome extension
 
+```bash
+./install-extension.sh
+```
+
+This auto-detects your browser, opens the extensions page, and copies the extension folder path to your clipboard.
+
+Or manually:
 1. Go to `chrome://extensions/`
 2. Enable **Developer mode** (toggle in top right)
 3. Click **Load unpacked**
 4. Select the `extension/` folder from this project
-5. The extension icon appears in your toolbar
 
-### 4. Authenticate with Google
+### 4. Authenticate with Google (first time only)
 
-First time only:
-1. Visit `http://localhost:8742/drive/auth/url` in your browser
-2. Sign in with your Google account
-3. Grant Drive (read-only) and Sheets (read-only) access
-4. You'll be redirected — authentication is complete
+Visit [http://localhost:8742/drive/auth/url](http://localhost:8742/drive/auth/url) in your browser, sign in with your Google account, and grant the requested permissions.
 
-### 5. Load your project
+### 5. Load a project and start chatting
 
-1. Click the extension icon to open the side panel
-2. Paste your Google Drive folder URL (or ID) in the input field
+1. Click the PhiDkick icon 📄 in your Chrome toolbar to open the side panel
+2. Paste your Google Drive folder URL (or ID):
    ```
    https://drive.google.com/drive/folders/1abc123...
    ```
 3. Click **Load Project**
-4. If this is a resumed session, you'll see a summary of where you left off
-
-### 6. Start chatting
+4. Pick your interaction type (Brainstorming, Paper Discussion, etc.)
 
 Ask questions like:
 - "What are Reviewer 2's main concerns?"
@@ -109,13 +114,38 @@ Ask questions like:
 - "Compare what Reviewer 1 and Reviewer 2 said about the statistical analysis"
 - "Help me rephrase this paragraph to be clearer"
 
+---
+
+## Google Drive Setup (re-run anytime)
+
+```bash
+./start.sh --setup
+```
+
+If LLM is already configured, the wizard skips straight to Google Drive setup.
+
+### What the wizard does
+
+The setup wizard treats Google Cloud Console as part of the app — it auto-opens each page you need and tells you exactly what to click:
+
+| Step | What it opens | What you do |
+|------|--------------|-------------|
+| 1 | Project creation page | Click "Create" |
+| 2 | Drive API page | Click "Enable" |
+| 3 | Sheets API page | Click "Enable" |
+| 4 | OAuth consent screen | Fill in app name, add scopes, add test user |
+| 5 | Credentials page | Create OAuth client ID → Download JSON |
+| 6 | (Local) | Wizard auto-finds the JSON in ~/Downloads, validates it, installs it |
+
+---
+
 ## Project Folder Structure
 
 Your Google Drive folder should look like this:
 
 ```
 /My Paper Revision/
-├── manuscript.pdf               # Your paper (PDF or DOCX or Google Doc)
+├── manuscript.pdf               # Your paper (PDF, DOCX, or Google Doc)
 ├── figures/
 │   ├── fig1_methodology.png
 │   ├── fig2_main_results.png
@@ -128,10 +158,12 @@ Your Google Drive folder should look like this:
 │   ├── reviewer_2.pdf
 │   └── combined_comments.docx
 ├── response_letter.md            # Your draft response (optional)
-└── .paper-assistant-memory.json         # Auto-created session state
+└── .paper-assistant-memory.json  # Auto-created session state
 ```
 
 You can also use a **Google Sheet** for reviewer comments — the system auto-detects columns like "Reviewer", "Comment", "Severity", and "Response".
+
+---
 
 ## Sharing with Labmates
 
@@ -140,17 +172,12 @@ Each person needs their own setup — PhiDkick runs locally and uses personal AP
 ### For a labmate setting up from scratch
 
 1. **Get the code**: Clone or copy the `scientific-paper-assistant/` folder
-2. **Get an LLM API key**: Sign up at [DeepSeek](https://platform.deepseek.com/) (or Anthropic, OpenAI, etc.) and get an API key
-3. **Set up Google Cloud**:
-   - Go to [Google Cloud Console](https://console.cloud.google.com/)
-   - Create a project → Enable **Google Drive API** and **Google Sheets API**
-   - Create an OAuth 2.0 Client ID (Desktop application)
-   - Download the credentials JSON → save as `~/.scientific-paper-assistant/google_credentials.json`
-4. **Run setup**: `./start.sh --setup` — configures LLM provider and API key
-5. **Start the server**: `./start.sh`
-6. **Load the extension**: `chrome://extensions` → Developer mode → Load unpacked → select the `extension/` folder
-7. **Authenticate**: Visit `http://localhost:8742/drive/auth/url` → sign in with Google
-8. **Load a project**: Paste a Google Drive folder URL and click Load Project
+2. **Get an LLM API key**: Sign up at [DeepSeek](https://platform.deepseek.com/) (or Anthropic, OpenAI, etc.)
+3. **Run the setup wizard**: `./start.sh --setup` — it guides you through Google Cloud setup and LLM config
+4. **Start the server**: `./start.sh`
+5. **Load the extension**: Run `./install-extension.sh` or follow the manual steps
+6. **Authenticate**: Visit `http://localhost:8742/drive/auth/url`
+7. **Load a project**: Paste a Google Drive folder URL and click Load Project
 
 ### Using the same Google Drive folder (collaborating)
 
@@ -162,7 +189,7 @@ If you want to work on the same paper together:
 
 ### Cross-computer resume (same person, different machine)
 
-Same as above — clone the code, copy your `google_credentials.json`, run setup. Paste the same Drive folder ID and the server restores your session.
+Same as above — clone the code, run `./start.sh --setup` on the new machine (you'll need your Google credentials JSON again). Paste the same Drive folder ID and the server restores your session.
 
 ### Security
 
@@ -170,6 +197,49 @@ Same as above — clone the code, copy your `google_credentials.json`, run setup
 - `.gitignore` already excludes these
 - Each person should use their own Google Cloud OAuth client and API key
 - Local data (`~/.scientific-paper-assistant/`) contains tokens — don't share that folder
+
+---
+
+## Configuration
+
+### LLM Provider
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LLM_PROVIDER` | `anthropic` | Provider: `anthropic`, `deepseek`, `openai`, or `custom` |
+| `LLM_API_KEY` | (required) | Your API key |
+| `LLM_MODEL` | (provider default) | Model name override |
+| `LLM_BASE_URL` | (provider default) | Base URL for custom providers |
+
+These are saved to `.env` by the setup wizard.
+
+### Server
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `REVISION_HOST` | `127.0.0.1` | Server bind address |
+| `REVISION_PORT` | `8742` | Server port |
+| `GOOGLE_CREDENTIALS` | `~/.scientific-paper-assistant/google_credentials.json` | Path to Google OAuth credentials |
+
+### Switching providers later
+
+Run `./start.sh --setup` again, or edit `.env` directly and restart the server.
+
+---
+
+## Commands
+
+| Command | What it does |
+|---------|-------------|
+| `./start.sh` | Start the server |
+| `./start.sh --setup` | Setup wizard (LLM + Google Drive + background service) |
+| `./start.sh --install-service` | Install as background service (auto-start on login) |
+| `./start.sh --uninstall-service` | Remove background service |
+| `./start.sh --install` | Install dependencies then start |
+| `./start.sh --help` | Show help |
+| `./install-extension.sh` | Browser-guided extension loading |
+
+---
 
 ## API Endpoints
 
@@ -191,32 +261,30 @@ Same as above — clone the code, copy your `google_credentials.json`, run setup
 | `/memory/decision` | POST | Record a decision |
 | `/memory/comment/{id}` | PUT | Update a comment's state |
 
-## Configuration
+---
 
-### LLM Provider
+## Troubleshooting
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `LLM_PROVIDER` | `anthropic` | Provider: `anthropic`, `deepseek`, `openai`, or `custom` |
-| `LLM_API_KEY` | (required) | Your API key (unified; provider-specific keys also accepted) |
-| `LLM_MODEL` | (provider default) | Model name override |
-| `LLM_BASE_URL` | (provider default) | Base URL for openai/custom providers |
+**Server won't start — "No LLM API key found"**
+Run `./start.sh --setup` to configure your API key, or create a `.env` file with `LLM_API_KEY=your-key-here`.
 
-### Server
+**"Google credentials not found" when starting**
+Run `./start.sh --setup` to run the guided Google Drive setup wizard.
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `REVISION_HOST` | `127.0.0.1` | Server bind address |
-| `REVISION_PORT` | `8742` | Server port |
-| `GOOGLE_CREDENTIALS` | `~/.scientific-paper-assistant/google_credentials.json` | Path to Google OAuth credentials |
+**Extension side panel shows "Server disconnected"**
+Make sure the server is running (`./start.sh`). The status dot in the top bar should be green.
 
-### Switching providers later
+**Google auth page says "Error: redirect_uri_mismatch"**
+Make sure you created an OAuth client ID of type "Desktop application" (not "Web application"). Re-run `./start.sh --setup` to redo the credentials.
 
-Just change `LLM_PROVIDER` and (if needed) `LLM_API_KEY` + `LLM_MODEL` in your `.env` file or shell, then restart the server. All chat history and reviewer comment state are preserved.
+**"This app isn't verified" warning during Google sign-in**
+This is normal for a local app. Click "Advanced" → "Go to PhiDkick (unsafe)" to continue. You added yourself as a test user during setup, so this works.
+
+---
 
 ## Tips
 
-- **Use a Google Sheet for reviewer comments** — easier to track status and add your draft responses
+- **Use a Google Sheet for reviewer comments** — easier to track status and add draft responses
 - **Name figures clearly** — `fig2_main_results.png` is better than `IMG_4829.png`
 - **Keep the server running** — it's lightweight and stateless between requests
 - **The memory file is human-readable** — you can inspect or edit `.paper-assistant-memory.json` in your Drive folder

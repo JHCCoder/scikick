@@ -51,6 +51,19 @@ async def health_check():
     return {"status": "ok", "version": "0.1.0"}
 
 
+@app.post("/server/restart")
+async def restart_server():
+    """Gracefully restart the server (launchd restarts it if running as a service)."""
+    import signal, os, threading
+
+    def _shutdown():
+        os.kill(os.getpid(), signal.SIGTERM)
+
+    # Delay slightly so the response is sent before shutdown
+    threading.Timer(0.3, _shutdown).start()
+    return {"status": "restarting"}
+
+
 # ---------------------------------------------------------------------------
 # Import and mount routers (created as we build each module)
 # ---------------------------------------------------------------------------

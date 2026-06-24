@@ -48,9 +48,304 @@ install_deps() {
     echo -e "${GREEN}✓ Dependencies installed${NC}"
 }
 
-first_time_setup() {
-    echo -e "${YELLOW}First-time setup wizard${NC}"
+google_credentials_setup() {
+    CREDS_DIR="$HOME/.scientific-paper-assistant"
+    mkdir -p "$CREDS_DIR"
+    CREDS_FILE="$CREDS_DIR/google_credentials.json"
+
+    if [ -f "$CREDS_FILE" ]; then
+        # Validate existing credentials
+        EXISTING_ID=$(python3 -c "
+import json
+try:
+    c = json.load(open('$CREDS_FILE'))
+    inst = c.get('installed', c)
+    cid = inst.get('client_id', '')
+    secret = inst.get('client_secret', '')
+    if cid and secret:
+        print(cid[:30])
+    else:
+        print('INVALID')
+except:
+    print('INVALID')
+" 2>/dev/null)
+
+        if [ "$EXISTING_ID" != "INVALID" ] && [ -n "$EXISTING_ID" ]; then
+            echo -e "${GREEN}✓ Google credentials configured (Client ID: ${EXISTING_ID}…)${NC}"
+            echo "  To redo setup, delete $CREDS_FILE and re-run this wizard."
+            echo ""
+            return 0
+        else
+            echo -e "${YELLOW}Existing credentials appear invalid. Let's redo the setup.${NC}"
+            echo ""
+        fi
+    fi
+
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BLUE}  Google Drive Setup${NC}"
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
+    echo "PhiDkick needs access to your Google Drive to load your papers."
+    echo "I'll walk you through this in ~5 minutes."
+    echo "You'll need a Google account (any Gmail works)."
+    echo ""
+
+    # ── Step 1: Create project ──
+    echo -e "${YELLOW}Step 1/6: Create a Google Cloud project${NC}"
+    echo "A 'project' is just a container for your app settings."
+    echo ""
+    if command -v open &>/dev/null; then
+        read -r -p "Open the project creation page in your browser? [Y/n]: " resp
+        if [ "$resp" != "n" ] && [ "$resp" != "N" ]; then
+            open "https://console.cloud.google.com/projectcreate" 2>/dev/null || true
+        fi
+    else
+        echo "Go to: https://console.cloud.google.com/projectcreate"
+    fi
+    echo ""
+    echo "  → Click the blue 'CREATE' button"
+    echo "  → Wait for the notification bell to show 'Project created'"
+    read -r -p "Press Enter when your project is ready…"
+
+    # ── Step 2: Enable Drive API ──
+    echo ""
+    echo -e "${YELLOW}Step 2/6: Enable the Google Drive API${NC}"
+    if command -v open &>/dev/null; then
+        read -r -p "Open the Drive API page? [Y/n]: " resp
+        if [ "$resp" != "n" ] && [ "$resp" != "N" ]; then
+            open "https://console.cloud.google.com/apis/library/drive.googleapis.com" 2>/dev/null || true
+        fi
+    else
+        echo "Go to: https://console.cloud.google.com/apis/library/drive.googleapis.com"
+    fi
+    echo "  → Make sure your project is selected (dropdown at the top)"
+    echo "  → Click the blue 'ENABLE' button"
+    read -r -p "Press Enter when done…"
+
+    # ── Step 3: Enable Sheets API ──
+    echo ""
+    echo -e "${YELLOW}Step 3/6: Enable the Google Sheets API${NC}"
+    if command -v open &>/dev/null; then
+        read -r -p "Open the Sheets API page? [Y/n]: " resp
+        if [ "$resp" != "n" ] && [ "$resp" != "N" ]; then
+            open "https://console.cloud.google.com/apis/library/sheets.googleapis.com" 2>/dev/null || true
+        fi
+    else
+        echo "Go to: https://console.cloud.google.com/apis/library/sheets.googleapis.com"
+    fi
+    echo "  → Click the blue 'ENABLE' button"
+    read -r -p "Press Enter when done…"
+
+    # ── Step 4: OAuth consent screen ──
+    echo ""
+    echo -e "${YELLOW}Step 4/6: Configure the OAuth consent screen${NC}"
+    if command -v open &>/dev/null; then
+        read -r -p "Open APIs & Services dashboard? [Y/n]: " resp
+        if [ "$resp" != "n" ] && [ "$resp" != "N" ]; then
+            open "https://console.cloud.google.com/apis" 2>/dev/null || true
+        fi
+    else
+        echo "Go to: https://console.cloud.google.com/apis"
+    fi
+    echo ""
+    echo "  In the left sidebar, click 'OAuth consent screen'."
+    echo "  → If this is a new project, you'll see an Overview page with a"
+    echo "    'GET STARTED' button (the OAuth platform isn't configured yet)."
+    echo "    Click 'GET STARTED'."
+    echo ""
+    echo "  On the form that appears:"
+    echo "  → App name:        PhiDkick"
+    echo "  → User support:    your email address"
+    echo "  → Developer contact: your email address"
+    echo "  → Click 'SAVE AND CONTINUE'"
+    echo ""
+    echo "  Next: To set up Scopes, go to the 'Data access' section:"
+    echo "  → Click 'ADD OR REMOVE SCOPES'"
+    echo "  → Add these scopes one at a time:"
+    echo "      https://www.googleapis.com/auth/drive.readonly"
+    echo "      https://www.googleapis.com/auth/drive.file"
+    echo "      https://www.googleapis.com/auth/spreadsheets.readonly"
+    echo "  → Click 'UPDATE' → 'SAVE AND CONTINUE'"
+    echo ""
+    echo "  To add Test users, go to the 'Audience' section:"
+    echo "  → Click 'ADD USERS' → enter your email → 'ADD'"
+    echo "  → (This lets you sign in before Google verifies the app —"
+    echo "     otherwise you'll get an 'unverified app' error.)"
+    echo "  → Click 'SAVE AND CONTINUE' → 'BACK TO DASHBOARD'"
+    read -r -p "Press Enter when done…"
+
+    # ── Step 5: Create OAuth client ID ──
+    echo ""
+    echo -e "${YELLOW}Step 5/6: Create the OAuth client ID${NC}"
+    if command -v open &>/dev/null; then
+        read -r -p "Open the Credentials page? [Y/n]: " resp
+        if [ "$resp" != "n" ] && [ "$resp" != "N" ]; then
+            open "https://console.cloud.google.com/apis/credentials" 2>/dev/null || true
+        fi
+    else
+        echo "Go to: https://console.cloud.google.com/apis/credentials"
+    fi
+    echo ""
+    echo "  → Click '+ CREATE CREDENTIALS' (top) → 'OAuth client ID'"
+    echo "  → Application type: 'Desktop application'"
+    echo "  → Name: 'PhiDkick Desktop'"
+    echo "  → Click 'CREATE'"
+    echo "  → In the popup, click 'DOWNLOAD JSON'"
+    read -r -p "Press Enter after downloading the JSON file…"
+
+    # ── Step 6: Find and install the credentials ──
+    echo ""
+    echo -e "${YELLOW}Step 6/6: Installing your credentials${NC}"
+    echo ""
+    echo "  We need to copy the JSON file you just downloaded into the location"
+    echo "  where PhiDkick expects it:"
+    echo -e "    ${GREEN}$CREDS_FILE${NC}"
+    echo ""
+    echo "  The file is named something like 'client_secret_XXXXXXXXXXXX.json'"
+    echo "  and by default it lands in your ~/Downloads folder."
+    echo ""
+
+    FOUND=""
+    DOWNLOADS="$HOME/Downloads"
+
+    echo -n "  Scanning ~/Downloads for client_secret*.json… "
+
+    if [ -d "$DOWNLOADS" ]; then
+        if [ -r "$DOWNLOADS" ]; then
+            CANDIDATES=$(ls -t "$DOWNLOADS"/client_secret*.json 2>/dev/null | head -3)
+            if [ -n "$CANDIDATES" ]; then
+                NEWEST=$(echo "$CANDIDATES" | head -1)
+                echo "found!"
+                echo "    $(basename "$NEWEST")"
+                echo "    (downloaded: $(ls -lh "$NEWEST" | awk '{print $6, $7, $8}'))"
+                FOUND="$NEWEST"
+                echo "  Using this file automatically. (Run again to pick a different file.)"
+                echo ""
+            else
+                echo "no client_secret*.json files found."
+                echo ""
+            fi
+        else
+            echo "cannot read ~/Downloads (permissions issue?)."
+            echo "  Try: chmod +r ~/Downloads"
+            echo ""
+        fi
+    else
+        echo "~/Downloads not found."
+        echo ""
+    fi
+
+    if [ -z "$FOUND" ]; then
+        echo "  Let's find the file manually:"
+        echo "    • Drag the file from your Downloads folder into this terminal"
+        echo "    • Or paste the full path, e.g.:"
+        echo "      $HOME/Downloads/client_secret_1234567890.json"
+        echo ""
+        read -r -p "  Path: " FOUND
+        FOUND=$(echo "$FOUND" | sed "s/^['\"]//;s/['\"]\$//")
+    fi
+
+    if [ ! -f "$FOUND" ]; then
+        echo -e "${RED}✗ File not found: $FOUND${NC}"
+        echo ""
+        echo "  Tip: the file is wherever your browser saved it — usually ~/Downloads."
+        echo "  Look for a file named 'client_secret_*.json'."
+        echo ""
+        echo "  You can re-run this wizard later with: ./start.sh --setup"
+        return 1
+    fi
+
+    # Copy the file to the app's credentials directory
+    if ! cp "$FOUND" "$CREDS_FILE" 2>/dev/null; then
+        echo ""
+        echo -e "${RED}✗ Could not read the file (macOS may block terminal access to ~/Downloads).${NC}"
+        echo ""
+        echo "  Quick fix: drag the file to your Desktop, then paste the new path:"
+        echo "    $HOME/Desktop/$(basename "$FOUND")"
+        echo ""
+        read -r -p "  New path: " FOUND
+        FOUND=$(echo "$FOUND" | sed "s/^['\"]//;s/['\"]\$//")
+        if [ ! -f "$FOUND" ]; then
+            echo -e "${RED}✗ Still couldn't find the file.${NC}"
+            echo "  Move it to your Desktop and re-run: ./start.sh --setup"
+            return 1
+        fi
+        if ! cp "$FOUND" "$CREDS_FILE" 2>/dev/null; then
+            echo -e "${RED}✗ Copy still failed.${NC}"
+            echo "  Try manually: cp ~/Desktop/$(basename "$FOUND") $CREDS_FILE"
+            echo "  Then re-run: ./start.sh --setup"
+            return 1
+        fi
+    fi
+
+    echo ""
+    echo "  $(basename "$FOUND") → $CREDS_FILE"
+    echo ""
+
+    # ── Validate ──
+    echo -n "Verifying the credentials file… "
+    CLIENT_ID=$(python3 -c "
+import json, sys
+try:
+    c = json.load(open('$CREDS_FILE'))
+    inst = c.get('installed', c)
+    cid = inst.get('client_id', '')
+    secret = inst.get('client_secret', '')
+    uri = inst.get('redirect_uris', [''])[0] if isinstance(inst.get('redirect_uris'), list) else ''
+    if not cid or not secret:
+        print('INVALID:missing_fields')
+        sys.exit(1)
+    if 'localhost' not in str(inst.get('redirect_uris', [])):
+        print('OK_NOLOCAL')  # desktop app type — fine
+    else:
+        print('OK')
+except Exception as e:
+    print('INVALID:' + str(e))
+    sys.exit(1)
+" 2>/dev/null)
+
+    if [[ "$CLIENT_ID" == INVALID* ]]; then
+        echo -e "${RED}✗ Invalid${NC}"
+        echo "  The file doesn't look like a valid OAuth client secret."
+        echo "  Make sure you downloaded from 'OAuth 2.0 Client IDs' (not API keys or service accounts)."
+        echo "  Error: ${CLIENT_ID#INVALID:}"
+        rm -f "$CREDS_FILE"
+        echo ""
+        echo "You can re-run this wizard with: ./start.sh --setup"
+        return 1
+    fi
+
+    echo -e "${GREEN}✓ Valid${NC}"
+    echo ""
+    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${GREEN}  Google Drive setup complete!${NC}"
+    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "  After starting the server, visit this URL to sign in:"
+    echo -e "  ${BLUE}http://localhost:8742/drive/auth/url${NC}"
+    echo ""
+}
+
+first_time_setup() {
+    echo -e "${YELLOW}PhiDkick Setup Wizard${NC}"
+    echo ""
+
+    # Check if LLM is already configured (has .env with API key)
+    SKIP_LLM=false
+    ENV_FILE="$SCRIPT_DIR/.env"
+    if [ -f "$ENV_FILE" ] && grep -qE '^LLM_API_KEY=.+' "$ENV_FILE" 2>/dev/null; then
+        source "$ENV_FILE"
+        echo -e "${GREEN}✓ LLM already configured (${LLM_PROVIDER:-unknown} / ${LLM_MODEL:-default})${NC}"
+        echo ""
+        read -r -p "Reconfigure LLM? [y/N]: " resp
+        if [ "$resp" != "y" ] && [ "$resp" != "Y" ]; then
+            SKIP_LLM=true
+            echo "  Skipping LLM setup — jumping to Google Drive."
+            echo ""
+        fi
+    fi
+
+    if [ "$SKIP_LLM" = false ]; then
 
     # --- Choose LLM provider ---
     echo -e "${YELLOW}Which LLM provider will you use?${NC}"
@@ -144,31 +439,117 @@ first_time_setup() {
         echo ""
     fi
 
-    # Check Google credentials
-    CREDS_DIR="$HOME/.scientific-paper-assistant"
-    mkdir -p "$CREDS_DIR"
+    fi  # SKIP_LLM
 
-    if [ ! -f "$CREDS_DIR/google_credentials.json" ]; then
-        echo ""
-        echo -e "${YELLOW}Google Cloud credentials not found.${NC}"
-        echo "To enable Google Drive access, you need a Google Cloud project with the Drive API enabled."
-        echo ""
-        echo "Steps:"
-        echo "  1. Go to https://console.cloud.google.com/"
-        echo "  2. Create a project (or select existing)"
-        echo "  3. Enable the Google Drive API"
-        echo "  4. Create an OAuth 2.0 Client ID (Desktop application type)"
-        echo "  5. Download the credentials JSON file"
-        echo "  6. Save it to: $CREDS_DIR/google_credentials.json"
-        echo ""
+    # Google Drive setup
+    google_credentials_setup
+
+    # Background service
+    echo ""
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BLUE}  Background Service${NC}"
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "  Would you like the server to start automatically when you log in?"
+    echo "  This way you just click the extension — no terminal needed."
+    echo "  (Uses ~30 MB RAM when idle, localhost only, negligible CPU.)"
+    echo ""
+    read -r -p "  Install as background service? [Y/n]: " resp
+    if [ "$resp" != "n" ] && [ "$resp" != "N" ]; then
+        install_service
     else
-        echo -e "${GREEN}✓ Google credentials found${NC}"
+        echo "  Skipped. Start the server manually with './start.sh' when needed."
     fi
 
     echo ""
     echo -e "${GREEN}Setup complete!${NC}"
     echo "  Provider: $LLM_PROVIDER"
     echo "  Model: ${LLM_MODEL:-default}"
+    echo ""
+}
+
+install_service() {
+    PLIST="$HOME/Library/LaunchAgents/com.phidkick.server.plist"
+    LOG_FILE="$HOME/.scientific-paper-assistant/server.log"
+    ERR_FILE="$HOME/.scientific-paper-assistant/server.err"
+
+    echo ""
+    echo -e "${BLUE}Installing background service…${NC}"
+    echo "  This makes the server start automatically when you log in."
+    echo "  No need to run ./start.sh manually — just click the extension."
+    echo ""
+
+    mkdir -p "$HOME/Library/LaunchAgents"
+    mkdir -p "$HOME/.scientific-paper-assistant"
+
+    cat > "$PLIST" << EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.phidkick.server</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>$SCRIPT_DIR/start.sh</string>
+        <string>--daemon</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>$SCRIPT_DIR</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>$LOG_FILE</string>
+    <key>StandardErrorPath</key>
+    <string>$ERR_FILE</string>
+</dict>
+</plist>
+EOF
+
+    # Stop any existing instance
+    launchctl bootout gui/$(id -u)/com.phidkick.server 2>/dev/null || true
+    launchctl unload "$PLIST" 2>/dev/null || true
+
+    # Load the service
+    if launchctl bootstrap gui/$(id -u) "$PLIST" 2>/dev/null; then
+        :
+    elif launchctl load "$PLIST" 2>/dev/null; then
+        :
+    else
+        echo -e "${RED}✗ Could not start the service automatically.${NC}"
+        echo "  Try manually: launchctl load $PLIST"
+        echo "  Or just run './start.sh' when you need the server."
+        return 1
+    fi
+
+    # Verify it started
+    sleep 1
+    if curl -s http://localhost:8742/health > /dev/null 2>&1; then
+        echo -e "${GREEN}✓ Background service installed and running${NC}"
+    else
+        echo -e "${YELLOW}⚠ Service installed but may not have started.${NC}"
+        echo "  Check logs: $ERR_FILE"
+        echo "  Try manually: launchctl load $PLIST"
+    fi
+    echo "  Server starts automatically when you log in."
+    echo "  Logs: $LOG_FILE"
+    echo ""
+    echo "  To uninstall: ./start.sh --uninstall-service"
+    echo ""
+}
+
+uninstall_service() {
+    PLIST="$HOME/Library/LaunchAgents/com.phidkick.server.plist"
+
+    echo "Stopping background service…"
+    launchctl bootout gui/$(id -u)/com.phidkick.server 2>/dev/null || \
+    launchctl unload "$PLIST" 2>/dev/null || true
+
+    rm -f "$PLIST"
+    echo -e "${GREEN}✓ Background service removed${NC}"
     echo ""
 }
 
@@ -187,14 +568,6 @@ start_server() {
         exit 1
     fi
 
-    # Check venv
-    if [ ! -d "$VENV_DIR" ]; then
-        echo -e "${YELLOW}Virtual environment not found. Installing dependencies...${NC}"
-        install_deps
-    fi
-
-    source "$VENV_DIR/bin/activate"
-
     echo ""
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${GREEN}  Server:  http://localhost:8742${NC}"
@@ -202,18 +575,35 @@ start_server() {
     echo -e "${GREEN}  API docs: http://localhost:8742/docs${NC}"
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    echo -e "${YELLOW}Next steps:${NC}"
-    echo "  1. Load the Chrome extension:"
-    echo "     → Go to chrome://extensions/"
-    echo "     → Enable 'Developer mode'"
-    echo "     → Click 'Load unpacked'"
-    echo "     → Select: $SCRIPT_DIR/extension"
-    echo ""
-    echo "  2. Click the extension icon to open the side panel"
-    echo ""
-    echo "  3. Authenticate with Google (first time only):"
-    echo "     → Visit http://localhost:8742/drive/auth/url"
-    echo ""
+
+    # ── First-run onboarding (skip if already set up) ──
+    TOKEN_FILE="$HOME/.scientific-paper-assistant/google_token.json"
+    if [ ! -f "$TOKEN_FILE" ]; then
+        # Extension loading guide (first time only)
+        if [ -f "$SCRIPT_DIR/install-extension.sh" ]; then
+            bash "$SCRIPT_DIR/install-extension.sh"
+        else
+            echo -e "${YELLOW}Load the Chrome extension:${NC}"
+            echo "  → Go to chrome://extensions/"
+            echo "  → Enable 'Developer mode' (toggle in top right)"
+            echo "  → Click 'Load unpacked'"
+            echo "  → Select: $SCRIPT_DIR/extension"
+            echo ""
+        fi
+
+        # Google auth reminder
+        CREDS_FILE="$HOME/.scientific-paper-assistant/google_credentials.json"
+        if [ -f "$CREDS_FILE" ]; then
+            echo -e "${YELLOW}Authenticate with Google:${NC}"
+            echo "  → Visit http://localhost:8742/drive/auth/url"
+            echo ""
+        else
+            echo -e "${YELLOW}Google Drive not configured yet.${NC}"
+            echo "  → Run './start.sh --setup' to configure it."
+            echo ""
+        fi
+    fi
+
     echo -e "${YELLOW}Press Ctrl+C to stop the server${NC}"
     echo ""
 
@@ -233,14 +623,33 @@ case "${1:-}" in
         install_deps
         first_time_setup
         ;;
+    --install-service)
+        install_service
+        ;;
+    --uninstall-service)
+        uninstall_service
+        ;;
+    --daemon)
+        # Silent mode for launchd — skip banner and interactive prompts
+        if [ -f "$SCRIPT_DIR/.env" ]; then
+            set -a; source "$SCRIPT_DIR/.env"; set +a
+        fi
+        if [ ! -d "$VENV_DIR" ]; then
+            install_deps
+        fi
+        cd "$SERVER_DIR"
+        exec "$VENV_DIR/bin/python3" main.py
+        ;;
     --help|-h)
         echo "Usage: ./start.sh [OPTION]"
         echo ""
         echo "Options:"
-        echo "  (none)      Start the server"
-        echo "  --install   Install dependencies, then start"
-        echo "  --setup     First-time setup wizard"
-        echo "  --help      Show this help"
+        echo "  (none)             Start the server"
+        echo "  --install          Install dependencies, then start"
+        echo "  --setup            Setup wizard (LLM + Google Drive)"
+        echo "  --install-service  Install as background service (auto-start on login)"
+        echo "  --uninstall-service Remove background service"
+        echo "  --help             Show this help"
         ;;
     *)
         # Ensure deps are installed if venv exists

@@ -12,6 +12,7 @@ import logging
 from datetime import datetime, timezone
 from typing import AsyncGenerator, Optional
 
+import httpx
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -40,24 +41,32 @@ router = APIRouter()
 _current_doc: Optional[PaperDocument] = None
 _current_comments: list[ReviewerComment] = []
 _image_cache: dict[str, bytes] = {}  # filename -> raw bytes
+_current_doc_source: str = ""  # "drive:<folder_id>"
+
+# Web-scraped papers — accumulate (multiple allowed), separate from Drive context
+_scraped_docs: list[PaperDocument] = []
+_scraped_sources: list[str] = []  # URLs, parallel to _scraped_docs
 
 
 def set_project_context(
     doc: PaperDocument,
     comments: list[ReviewerComment],
     images: dict[str, bytes] = None,
+    source: str = "",
 ) -> None:
     """Set the current project context for chat sessions."""
-    global _current_doc, _current_comments, _image_cache
+    global _current_doc, _current_comments, _image_cache, _current_doc_source
     _current_doc = doc
     _current_comments = comments
+    _current_doc_source = source
     if images:
         _image_cache = images
     logger.info(
-        "Project context set: %d sections, %d comments, %d images",
+        "Project context set: %d sections, %d comments, %d images (source=%s)",
         len(doc.sections),
         len(comments),
         len(_image_cache),
+        source,
     )
 
 
@@ -223,6 +232,24 @@ def _build_user_message(
         )
         if context:
             parts.append(context)
+            parts.append("---\n")
+
+    # Web-scraped papers (accumulate separately from Drive context)
+    global _scraped_docs, _scraped_sources
+    if _scraped_docs:
+        parts.append("## Web-Scraped Papers\n")
+        parts.append(f"The user has scraped {len(_scraped_docs)} paper(s) from the web. These are separate from any Drive-loaded project.\n\n")
+        for i, sdoc in enumerate(_scraped_docs):
+            parts.append(f"### Scraped Paper {i + 1}: {sdoc.title}\n")
+            parts.append(f"Source: {_scraped_sources[i] if i < len(_scraped_sources) else 'unknown'}\n")
+            if sdoc.abstract:
+                parts.append(f"Abstract: {sdoc.abstract[:1500]}\n")
+            parts.append(f"Sections: {', '.join(s.heading for s in sdoc.sections)}\n")
+            # Include body text (capped to keep context manageable)
+            body = sdoc.full_text
+            if len(body) > 6000:
+                body = body[:6000] + "\n[... truncated]"
+            parts.append(f"\n{body}\n")
             parts.append("---\n")
 
     # The user's actual message
@@ -600,6 +627,12 @@ async def context_usage():
             _estimate_tokens(t.content) for t in memory.chat_history
         )
 
+    # Scraped papers tokens (each paper's body capped at 6000 chars + metadata)
+    scraped_tokens = sum(
+        _estimate_tokens(doc.full_text[:6000]) + 200  # 200 for title/abstract/section metadata
+        for doc in _scraped_docs
+    )
+
     # Current message + response reserve
     message_reserve = 8000  # ~2000 tokens for message + 6000 for response
 
@@ -608,6 +641,7 @@ async def context_usage():
         + resume_tokens
         + retrieval_tokens
         + history_tokens
+        + scraped_tokens
         + message_reserve
     )
 
@@ -621,6 +655,7 @@ async def context_usage():
             "system_prompt": system_tokens,
             "retrieval_chunks": retrieval_chunks_estimate,
             "chat_history": history_tokens,
+            "scraped_papers": scraped_tokens,
             "message_reserve": message_reserve,
         },
         "total_used": total_used,
@@ -629,6 +664,8 @@ async def context_usage():
         "pct_free": round(100 - pct_used, 1),
         "manuscript_available": _current_doc is not None,
         "manuscript_total_chars": len(_current_doc.full_text) if _current_doc else 0,
+        "scraped_papers_count": len(_scraped_docs),
+        "scraped_total_chars": sum(len(doc.full_text) for doc in _scraped_docs),
     }
 
 
@@ -725,4 +762,112 @@ async def get_context():
             for c in _current_comments
         ],
         "images": list(_image_cache.keys()),
+        "scraped_papers": [
+            {
+                "title": doc.title,
+                "url": _scraped_sources[i] if i < len(_scraped_sources) else "",
+                "sections": [s.heading for s in doc.sections],
+                "full_text_length": len(doc.full_text),
+            }
+            for i, doc in enumerate(_scraped_docs)
+        ],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Scraped papers management
+# ---------------------------------------------------------------------------
+
+
+@router.get("/scraped")
+async def list_scraped():
+    """List all web-scraped papers currently in context."""
+    return {
+        "papers": [
+            {
+                "index": i,
+                "title": doc.title,
+                "url": _scraped_sources[i] if i < len(_scraped_sources) else "",
+                "sections": [s.heading for s in doc.sections],
+                "full_text_length": len(doc.full_text),
+            }
+            for i, doc in enumerate(_scraped_docs)
+        ],
+        "count": len(_scraped_docs),
+    }
+
+
+@router.delete("/scraped")
+async def clear_scraped(index: int = None):
+    """Clear scraped papers. Pass ?index=N to remove one, or omit to clear all."""
+    global _scraped_docs, _scraped_sources
+    if index is not None:
+        if 0 <= index < len(_scraped_docs):
+            removed = _scraped_docs.pop(index)
+            _scraped_sources.pop(index)
+            return {"status": "removed", "title": removed.title, "remaining": len(_scraped_docs)}
+        raise HTTPException(status_code=404, detail=f"No scraped paper at index {index}")
+    count = len(_scraped_docs)
+    _scraped_docs = []
+    _scraped_sources = []
+    return {"status": "cleared", "removed": count}
+
+
+# ---------------------------------------------------------------------------
+# Web scraping — load paper from a journal webpage
+# ---------------------------------------------------------------------------
+
+
+class ScrapeRequest(BaseModel):
+    url: str
+    html: str = ""  # page HTML extracted by the extension from the active tab
+
+
+@router.post("/scrape")
+async def scrape_webpage(req: ScrapeRequest):
+    """Scrape a paper from a journal webpage and load it as chat context.
+
+    The Chrome extension extracts the full page HTML from the active browser
+    tab via chrome.scripting.executeScript — this uses the user's authenticated
+    session so journal sites with institutional access work.
+    """
+    from scraper import extract_content
+
+    if not req.html or len(req.html) < 100:
+        raise HTTPException(
+            status_code=400,
+            detail="No page HTML provided. The extension must extract the page content first.",
+        )
+
+    try:
+        logger.info("Scrape: parsing %d chars of HTML for %s", len(req.html), req.url)
+        doc = extract_content(req.html, req.url)
+    except Exception as exc:
+        logger.error("Scrape HTTP error for %s: %s", req.url, exc)
+        raise HTTPException(
+            status_code=502,
+            detail=f"Could not fetch the page: {exc}",
+        )
+    except Exception as exc:
+        logger.error("Scrape error for %s: %s", req.url, exc)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to scrape page: {exc}",
+        )
+
+    # Add to scraped papers (accumulate — multiple papers can coexist).
+    # This is separate from the Drive-loaded project context.
+    global _scraped_docs, _scraped_sources
+    _scraped_docs.append(doc)
+    _scraped_sources.append(req.url)
+
+    return {
+        "status": "scraped",
+        "url": req.url,
+        "title": doc.title,
+        "abstract_length": len(doc.abstract),
+        "full_text_length": len(doc.full_text),
+        "sections": [s.heading for s in doc.sections],
+        "section_count": len(doc.sections),
+        "scraped_count": len(_scraped_docs),
     }

@@ -56,6 +56,15 @@ body {
   50% { opacity: 0.4; }
 }
 
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+#topbar #btn-power.spinning {
+  animation: spin 1s linear infinite;
+}
+
 #topbar h1 {
   flex: 1;
   font-size: 15px;
@@ -75,6 +84,17 @@ body {
   border-radius: 4px;
 }
 #topbar button:hover { color: var(--text-primary); background: var(--bg-tertiary); }
+
+#topbar #btn-settings,
+#topbar #btn-power {
+  font-size: 20px;
+  padding: 5px 8px;
+}
+
+#topbar #btn-clear {
+  font-size: 16px;
+  padding: 5px 8px;
+}
 
 /* --- Banners --- */
 .banner {
@@ -455,26 +475,30 @@ body {
   border-color: var(--accent);
 }
 
-/* --- Typing indicator --- */
-#typing-indicator {
+/* --- Typing dots inside the assistant bubble --- */
+.typing-dots {
   display: flex;
-  gap: 4px;
-  padding: 8px 14px;
-  align-self: flex-start;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 0;
 }
-#typing-indicator.hidden { display: none; }
-#typing-indicator .dot {
+.typing-dots span {
   width: 7px; height: 7px;
   border-radius: 50%;
-  background: var(--text-secondary);
+  background: var(--accent);
+  display: inline-block;
   animation: bounce 1.4s infinite ease-in-out;
+  opacity: 0.9;
 }
-#typing-indicator .dot:nth-child(2) { animation-delay: 0.2s; }
-#typing-indicator .dot:nth-child(3) { animation-delay: 0.4s; }
+.typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+/* Remove old typing indicator (no longer used) */
+#typing-indicator { display: none; }
 
 @keyframes bounce {
-  0%, 80%, 100% { transform: scale(0.3); opacity: 0.5; }
-  40% { transform: scale(1); opacity: 1; }
+  0%, 80%, 100% { opacity: 0.3; }
+  40% { opacity: 1; }
 }
 
 /* --- Input --- */
