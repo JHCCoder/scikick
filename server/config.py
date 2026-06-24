@@ -35,7 +35,7 @@ GOOGLE_TOKEN_FILE = os.getenv(
 )
 GOOGLE_SCOPES = [
     "https://www.googleapis.com/auth/drive.readonly",  # list/download your existing files
-    "https://www.googleapis.com/auth/drive.file",       # create/update .paper-assistant-memory.json
+    "https://www.googleapis.com/auth/drive.file",       # create/update .scikick_memory.json
     "https://www.googleapis.com/auth/spreadsheets.readonly",
 ]
 
@@ -165,7 +165,7 @@ ANTHROPIC_MODEL = LLM_MODEL or PROVIDER_DEFAULTS["anthropic"]["model"]
 # ---------------------------------------------------------------------------
 # Memory file name inside the Drive folder
 # ---------------------------------------------------------------------------
-MEMORY_FILE_NAME = ".paper-assistant-memory.json"
+MEMORY_FILE_NAME = ".scikick_memory.json"
 
 # ---------------------------------------------------------------------------
 # File processing limits

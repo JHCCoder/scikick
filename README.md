@@ -18,7 +18,7 @@ Chrome Extension (side panel) ↔ Local Server (localhost:8742) ↔ Google Drive
 
 - **Server**: Python/FastAPI
 - **Extension**: Chrome Manifest V3 side panel
-- **Memory**: `.paper-assistant-memory.json` stored in your Google Drive project folder
+- **Memory**: `.scikick_memory.json` stored in your Google Drive project folder
 - **AI**: Multi-provider — Anthropic Claude, DeepSeek, OpenAI, or any OpenAI-compatible API
 
 ---
@@ -41,10 +41,18 @@ Chrome Extension (side panel) ↔ Local Server (localhost:8742) ↔ Google Drive
 | **OpenAI (GPT-4o)** | [platform.openai.com](https://platform.openai.com/) | `gpt-4o` |
 | **Custom** (Ollama, Groq, Together, etc.) | Your provider | Any |
 
-### 1. Run the setup wizard
+### 1. Get the code
 
 ```bash
+git clone https://github.com/JHCCoder/scikick.git
 cd scikick
+```
+
+Or copy the folder from a USB stick / shared drive — no git required.
+
+### 2. Run the setup wizard
+
+```bash
 ./start.sh --setup
 ```
 
@@ -54,7 +62,7 @@ The wizard walks you through:
 
 **This takes ~5 minutes** — most of that is clicking buttons in Google Cloud Console tabs that the wizard opens for you.
 
-### 2. Start the server
+### 3. Start the server
 
 The setup wizard asks if you want the server to start automatically on login (recommended). If you said yes, you're done — just click the extension.
 
@@ -79,7 +87,7 @@ You should see:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-### 3. Load the Chrome extension
+### 4. Load the Chrome extension
 
 ```bash
 ./install-extension.sh
@@ -93,11 +101,11 @@ Or manually:
 3. Click **Load unpacked**
 4. Select the `extension/` folder from this project
 
-### 4. Authenticate with Google (first time only)
+### 5. Authenticate with Google (first time only)
 
 Visit [http://localhost:8742/drive/auth/url](http://localhost:8742/drive/auth/url) in your browser, sign in with your Google account, and grant the requested permissions.
 
-### 5. Load a project and start chatting
+### 6. Load a project and start chatting
 
 1. Click the scikick icon 📄 in your Chrome toolbar to open the side panel
 2. Paste your Google Drive folder URL (or ID):
@@ -158,7 +166,7 @@ Your Google Drive folder should look like this:
 │   ├── reviewer_2.pdf
 │   └── combined_comments.docx
 ├── response_letter.md            # Your draft response (optional)
-└── .paper-assistant-memory.json  # Auto-created session state
+└── .scikick_memory.json  # Auto-created session state
 ```
 
 You can also use a **Google Sheet** for reviewer comments — the system auto-detects columns like "Reviewer", "Comment", "Severity", and "Response".
@@ -171,7 +179,7 @@ Each person needs their own setup — scikick runs locally and uses personal API
 
 ### For a labmate setting up from scratch
 
-1. **Get the code**: Clone or copy the `scikick/` folder
+1. **Get the code**: `git clone https://github.com/JHCCoder/scikick.git` (or copy from a USB stick)
 2. **Get an LLM API key**: Sign up at [DeepSeek](https://platform.deepseek.com/) (or Anthropic, OpenAI, etc.)
 3. **Run the setup wizard**: `./start.sh --setup` — it guides you through Google Cloud setup and LLM config
 4. **Start the server**: `./start.sh`
@@ -184,7 +192,7 @@ Each person needs their own setup — scikick runs locally and uses personal API
 If you want to work on the same paper together:
 - Share the Google Drive folder with your labmate (via Google Drive's Share button)
 - Each person uses their **own** Google OAuth credentials and LLM API key
-- The `.paper-assistant-memory.json` file syncs via Drive — you'll see each other's chat context
+- The `.scikick_memory.json` file syncs via Drive — you'll see each other's chat context
 - Each person's LLM responses are independent (your API keys are separate)
 
 ### Cross-computer resume (same person, different machine)
@@ -287,7 +295,7 @@ This is normal for a local app. Click "Advanced" → "Go to scikick (unsafe)" to
 - **Use a Google Sheet for reviewer comments** — easier to track status and add draft responses
 - **Name figures clearly** — `fig2_main_results.png` is better than `IMG_4829.png`
 - **Keep the server running** — it's lightweight and stateless between requests
-- **The memory file is human-readable** — you can inspect or edit `.paper-assistant-memory.json` in your Drive folder
+- **The memory file is human-readable** — you can inspect or edit `.scikick_memory.json` in your Drive folder
 
 ## License
 
