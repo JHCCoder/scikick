@@ -330,8 +330,16 @@ This is normal for a local app. Click "Advanced" → "Go to SciKick (unsafe)" to
 
 ## Support
 
-If SciKick saves you time on your research, [buy me a coffee on Ko-fi](https://ko-fi.com/scikick) ☕. It helps cover development time and keeps the tool free for everyone.
+If SciKick saves you time on your research, [buy me a coffee on Ko-fi](https://ko-fi.com/scikick) ☕.
 
 ## License
 
 MIT
+
+---
+
+<p align="center">
+  <a href="https://star-history.com/#JHCCoder/scikick&Date">
+    <img src="https://img.shields.io/github/stars/JHCCoder/scikick?style=social" alt="GitHub stars">
+  </a>
+</p>
