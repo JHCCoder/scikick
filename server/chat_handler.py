@@ -76,6 +76,9 @@ def set_project_context(
 
 SYSTEM_PROMPT = """You are scikick — an AI research companion helping a scientist with their academic work. You can assist with brainstorming, scientific writing, manuscript revision, peer review responses, data analysis, and general research discussion.
 
+## Your Identity
+You are powered by an LLM that the user configured in the ⚙ Settings panel. At the bottom of this system prompt you'll find the exact provider and model name you're running on. If the user asks what model or AI you are, answer with that specific provider and model — don't guess or say you don't know.
+
 ## Your Role
 - Help the researcher think through ideas, develop hypotheses, and plan experiments.
 - Provide scientific writing advice: clarity, argument structure, figure presentation, statistical reporting, and effective use of supplementary material.
@@ -158,6 +161,14 @@ class ChatResponse(BaseModel):
 def _build_system_prompt() -> str:
     """Build the full system prompt including resume context if available."""
     prompt = SYSTEM_PROMPT
+
+    # Tell the model exactly which provider/model it's running on so it can
+    # answer "What model are you?" directly instead of guessing.
+    try:
+        cfg = get_llm_config()
+        prompt += f"\n\n## Your Current Configuration\nYou are running on **{cfg['provider']}** — model: **{cfg['model']}**. The user selected this in the settings panel. If they ask what model you are, tell them this directly."
+    except Exception:
+        pass
 
     memory = get_current_memory()
     if memory and memory.chat_history:
@@ -259,6 +270,82 @@ def _build_user_message(
 
 
 # ---------------------------------------------------------------------------
+# Provider-specific error enrichment
+# ---------------------------------------------------------------------------
+
+# Known valid models per provider — used to give helpful suggestions on 404 / invalid-model errors.
+_PROVIDER_MODELS: dict[str, str] = {
+    "anthropic":  "claude-sonnet-4-6, claude-opus-4-8, claude-haiku-4-5",
+    "deepseek":   "deepseek-v4-pro, deepseek-v4-flash",
+    "glm":        "glm-4-plus, glm-4-flash, glm-4-long, glm-4-air",
+    "openai":     "gpt-4o, gpt-4-turbo, gpt-3.5-turbo",
+}
+
+
+def _clean_error_message(raw: str) -> str:
+    """Extract a human-readable message from a raw SDK/API error string.
+
+    Strips JSON blobs and HTTP status prefixes, leaving just the useful text.
+    """
+    import re as _re
+
+    # Try to pull out a "message" field from embedded JSON
+    for pattern in (r"\"message\"\s*:\s*\"([^\"]+)\"", r"'message'\s*:\s*'([^']+)'"):
+        m = _re.search(pattern, raw)
+        if m:
+            return m.group(1)
+
+    # Strip "Error code: NNN - " prefix added by the OpenAI SDK
+    cleaned = _re.sub(r"^Error code:\s*\d+\s*[-–—]\s*", "", raw).strip()
+
+    # If it still looks like a raw JSON/dict repr, fall back to a generic message
+    if cleaned.startswith("{") or cleaned.startswith("{"):
+        return "The API returned an error. See details above."
+
+    return cleaned
+
+
+def _enrich_error(error_message: str, provider: str, model: str) -> str:
+    """Append helpful guidance to raw API errors so the user knows how to fix them."""
+    clean = _clean_error_message(error_message)
+    parts = [clean]
+
+    msg_lower = error_message.lower()
+    is_auth = any(kw in msg_lower for kw in ("401", "unauthorized", "authentication", "x-api-key", "令牌", "过期", "验证"))
+    is_model = any(kw in msg_lower for kw in ("model", "invalid_request_error", "not found", "404"))
+
+    # Anthropic returns auth errors for invalid model names too, so always
+    # show model suggestions alongside auth guidance for Anthropic.
+    if provider == "anthropic" and is_auth:
+        is_model = True
+
+    if is_model:
+        known = _PROVIDER_MODELS.get(provider)
+        if known:
+            parts.append(
+                f"\n\n💡 Valid models for **{provider}**: {known}. "
+                f"You passed: `{model}`. Check the model name in the ⚙ Settings panel."
+            )
+
+    if is_auth:
+        provider_key_names = {
+            "anthropic": "ANTHROPIC_API_KEY",
+            "deepseek": "DEEPSEEK_API_KEY",
+            "glm": "GLM_API_KEY",
+            "openai": "OPENAI_API_KEY",
+        }
+        key_name = provider_key_names.get(provider, "LLM_API_KEY")
+        parts.append(
+            f"\n\n🔐 Authentication failed for **{provider}**. "
+            f"Make sure you're using your **{provider}** API key "
+            f"({key_name}) — not a key from another provider. "
+            f"Check the ⚙ Settings panel and re-enter the correct key."
+        )
+
+    return "".join(parts)
+
+
+# ---------------------------------------------------------------------------
 # Provider-specific streaming implementations
 # ---------------------------------------------------------------------------
 
@@ -284,8 +371,9 @@ async def _stream_anthropic(
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
     except Exception as exc:
+        enriched = _enrich_error(str(exc), "anthropic", model)
         logger.error("Anthropic API error: %s", exc)
-        yield f"data: {json.dumps({'type': 'error', 'content': str(exc)})}\n\n"
+        yield f"data: {json.dumps({'type': 'error', 'content': enriched})}\n\n"
 
 
 async def _stream_openai_compatible(
@@ -316,8 +404,17 @@ async def _stream_openai_compatible(
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
     except Exception as exc:
-        logger.error("LLM API error (%s): %s", model, exc)
-        yield f"data: {json.dumps({'type': 'error', 'content': str(exc)})}\n\n"
+        # Determine provider for error enrichment
+        try:
+            cfg = get_llm_config()
+            provider = cfg.get("provider", "unknown")
+            current_model = cfg.get("model", model)
+        except Exception:
+            provider = "unknown"
+            current_model = model
+        enriched = _enrich_error(str(exc), provider, current_model)
+        logger.error("LLM API error (%s): %s", current_model, exc)
+        yield f"data: {json.dumps({'type': 'error', 'content': enriched})}\n\n"
 
 
 # ---------------------------------------------------------------------------
@@ -457,8 +554,9 @@ async def send_message_sync(req: ChatRequest):
                 provider["base_url"],
             )
     except Exception as exc:
+        enriched = _enrich_error(str(exc), provider["provider"], provider["model"])
         logger.error("LLM API error: %s", exc)
-        raise HTTPException(status_code=502, detail=f"LLM API error: {exc}")
+        raise HTTPException(status_code=502, detail=enriched)
 
     # Update memory
     update_memory_after_chat(
@@ -547,6 +645,13 @@ async def list_providers():
                 "env_vars": "LLM_API_KEY or DEEPSEEK_API_KEY",
             },
             {
+                "id": "glm",
+                "name": "Zhipu AI (GLM)",
+                "sdk": "OpenAI-compatible",
+                "models": "glm-4-plus, glm-4-flash, glm-4-long, glm-4-air",
+                "env_vars": "LLM_API_KEY or GLM_API_KEY",
+            },
+            {
                 "id": "openai",
                 "name": "OpenAI (GPT-4o, etc.)",
                 "sdk": "OpenAI SDK",
@@ -570,13 +675,18 @@ async def list_providers():
 
 # Approximate context window sizes per model (in tokens)
 MODEL_CONTEXT_WINDOWS = {
-    "deepseek-v4-pro": 131072,
-    "deepseek-v4-flash": 131072,
-    "deepseek-chat": 65536,
+    "deepseek-v4-pro": 1048576,
+    "deepseek-v4-flash": 1048576,
+    "deepseek-chat": 131072,
     "deepseek-reasoner": 65536,
+    "glm-4-plus": 131072,
+    "glm-4-flash": 131072,
+    "glm-4-long": 1048576,
+    "glm-4-air": 131072,
     "claude-sonnet-4-6": 200000,
     "claude-opus-4-8": 200000,
     "claude-haiku-4-5": 200000,
+    "claude-fable-5": 200000,
     "gpt-4o": 128000,
     "gpt-4-turbo": 128000,
 }
@@ -738,19 +848,19 @@ async def refresh_context():
 
 @router.get("/context")
 async def get_context():
-    """Get a summary of the current project context."""
-    if _current_doc is None:
-        return {"loaded": False, "paper": None, "comments": [], "images": []}
+    """Get a summary of the current project context.
 
-    return {
-        "loaded": True,
-        "paper": {
+    Always returns whatever is loaded — manuscript, comments, and scraped
+    papers are independent and may be present without one another.
+    """
+    if _current_doc is not None:
+        paper = {
             "title": _current_doc.title,
             "sections": [s.heading for s in _current_doc.sections],
             "figures": [f.filename for f in _current_doc.figures],
             "full_text_length": len(_current_doc.full_text),
-        },
-        "comments": [
+        }
+        comments = [
             {
                 "id": c.id,
                 "reviewer": c.reviewer,
@@ -760,17 +870,31 @@ async def get_context():
                 "related_figures": c.related_figures,
             }
             for c in _current_comments
-        ],
-        "images": list(_image_cache.keys()),
-        "scraped_papers": [
-            {
-                "title": doc.title,
-                "url": _scraped_sources[i] if i < len(_scraped_sources) else "",
-                "sections": [s.heading for s in doc.sections],
-                "full_text_length": len(doc.full_text),
-            }
-            for i, doc in enumerate(_scraped_docs)
-        ],
+        ]
+        images = list(_image_cache.keys())
+        loaded = True
+    else:
+        paper = None
+        comments = []
+        images = []
+        loaded = False
+
+    scraped_papers = [
+        {
+            "title": doc.title,
+            "url": _scraped_sources[i] if i < len(_scraped_sources) else "",
+            "sections": [s.heading for s in doc.sections],
+            "full_text_length": len(doc.full_text),
+        }
+        for i, doc in enumerate(_scraped_docs)
+    ]
+
+    return {
+        "loaded": loaded,
+        "paper": paper,
+        "comments": comments,
+        "images": images,
+        "scraped_papers": scraped_papers,
     }
 
 
@@ -811,6 +935,81 @@ async def clear_scraped(index: int = None):
     _scraped_docs = []
     _scraped_sources = []
     return {"status": "cleared", "removed": count}
+
+
+@router.post("/reset")
+async def reset_all_state():
+    """Wipe all in-memory state — manuscript, comments, scraped papers, memory.
+
+    Returns the server to a clean slate without restarting.  Use this to
+    start a fresh session without losing the LLM configuration.
+    """
+    global _current_doc, _current_comments, _image_cache, _current_doc_source
+    global _scraped_docs, _scraped_sources
+
+    from memory_manager import get_current_memory, set_current_memory
+
+    # Track what we're clearing for the response
+    existing_memory = get_current_memory()
+    had_paper = _current_doc is not None
+    had_comments = len(_current_comments)
+    had_scraped = len(_scraped_docs)
+    had_memory = existing_memory is not None
+
+    _current_doc = None
+    _current_comments = []
+    _image_cache = {}
+    _current_doc_source = ""
+    _scraped_docs = []
+    _scraped_sources = []
+
+    if existing_memory is not None:
+        set_current_memory(None)
+
+    return {
+        "status": "reset",
+        "cleared": {
+            "manuscript": had_paper,
+            "comments": had_comments,
+            "scraped_papers": had_scraped,
+            "memory": had_memory,
+        },
+    }
+
+
+@router.post("/unload-project")
+async def unload_project():
+    """Clear the loaded Drive project (manuscript, comments, memory)
+    while keeping scraped articles intact.
+
+    Use this when switching projects without losing web-scraped papers.
+    """
+    global _current_doc, _current_comments, _image_cache, _current_doc_source
+
+    from memory_manager import get_current_memory, set_current_memory
+
+    existing_memory = get_current_memory()
+    had_paper = _current_doc is not None
+    had_comments = len(_current_comments)
+    had_memory = existing_memory is not None
+
+    _current_doc = None
+    _current_comments = []
+    _image_cache = {}
+    _current_doc_source = ""
+
+    if existing_memory is not None:
+        set_current_memory(None)
+
+    return {
+        "status": "unloaded",
+        "cleared": {
+            "manuscript": had_paper,
+            "comments": had_comments,
+            "memory": had_memory,
+        },
+        "scraped_preserved": len(_scraped_docs),
+    }
 
 
 # ---------------------------------------------------------------------------
