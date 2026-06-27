@@ -1298,7 +1298,6 @@ function updateTabBar(tab) {
   }
 
   dom.tabDomain.textContent = domainLabel(tab.url);
-  console.log("[TabBar] Current tab:", tab.title, "|", domainLabel(tab.url), "| viewingFile:", viewingFile);
 }
 
 /**
@@ -1309,13 +1308,10 @@ async function detectCurrentTab(retries = 3) {
   for (let i = 0; i <= retries; i++) {
     try {
       const response = await chrome.runtime.sendMessage({ type: "getCurrentTab" });
-      console.log("[TabBar] BG response:", response);
 
       if (response && response.ok) {
         updateTabBar({ title: response.title, url: response.url, id: response.id });
         return;
-      } else {
-        console.log("[TabBar] No tab from BG:", response);
       }
     } catch (err) {
       console.warn(`[TabBar] Attempt ${i + 1}/${retries + 1} failed:`, err.message);
@@ -1335,8 +1331,6 @@ async function detectCurrentTab(retries = 3) {
 
 /** Wire up the tab action button (load folder or scrape page) */
 function initTabBar() {
-  console.log("[TabBar] Initializing tab bar...");
-
   dom.btnUseTab.addEventListener("click", async () => {
     // "Load this folder" mode
     const folderId = dom.btnUseTab.dataset.folderId;
@@ -1486,10 +1480,7 @@ async function init() {
     }
   }, 20000);
 
-  console.log("[TabBar] Connected to background worker");
-
   // Detect current tab and listen for changes
-  console.log("[TabBar] Starting tab detection...");
   initTabBar();
   detectCurrentTab();
 

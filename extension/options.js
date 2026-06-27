@@ -1,7 +1,12 @@
 // Save / restore extension settings
 
 document.addEventListener("DOMContentLoaded", async () => {
-  const stored = await chrome.storage.local.get(["driveFolderId"]);
+  const stored = await chrome.storage.local.get(["driveFolderId", "theme"]);
+
+  // Apply the saved theme (kept in sync with the side panel's toggle)
+  if (stored.theme === "light") {
+    document.documentElement.classList.add("light-theme");
+  }
 
   if (stored.driveFolderId) {
     document.getElementById("drive-folder").value = stored.driveFolderId;

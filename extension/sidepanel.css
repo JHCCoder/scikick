@@ -9,6 +9,7 @@
   --text-secondary: #a0a0b0;
   --accent: #4fc3a1;
   --accent-hover: #3da88a;
+  --file-accent: #5b9bd5;   /* "viewing a project file" state — blue, distinct from the green accent */
   --danger: #e0556a;
   --warning: #f0a050;
   --border: #2a2a4a;
@@ -40,6 +41,7 @@ html.light-theme {
   --text-secondary: #6e6e80;
   --accent: #2d9d7a;
   --accent-hover: #237b60;
+  --file-accent: #1f6fb3;   /* darker blue for contrast on light backgrounds */
   --danger: #d94053;
   --warning: #d98a30;
   --border: #d1d1d6;
@@ -611,11 +613,11 @@ body {
   border-left: 3px solid var(--accent);
 }
 #current-tab-bar.viewing-project-file {
-  border-left: 3px solid #5b9bd5;
+  border-left: 3px solid var(--file-accent);
   background: rgba(91, 155, 213, 0.08);
 }
 #current-tab-bar.viewing-project-file .tab-title {
-  color: #5b9bd5;
+  color: var(--file-accent);
   font-weight: 600;
 }
 #btn-use-tab {
