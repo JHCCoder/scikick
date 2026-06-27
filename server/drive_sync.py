@@ -4,6 +4,7 @@ import asyncio
 import io
 import logging
 import pickle
+import time
 from functools import partial
 from pathlib import Path
 from typing import Optional
@@ -97,19 +98,35 @@ async def get_auth_url():
     auth_url, state = flow.authorization_url(
         access_type="offline", prompt="consent"
     )
-    _pending_flows[state] = flow
+    _prune_pending_flows()
+    _pending_flows[state] = (flow, time.time())
     return RedirectResponse(url=auth_url)
 
 
+# OAuth flows awaiting their callback, stored as {state: (flow, created_at)}.
+# Abandoned flows (user closes the tab mid-auth) would otherwise leak
+# InstalledAppFlow objects — which hold client secrets — forever, so entries
+# are pruned by TTL on each new auth request.
+_PENDING_FLOW_TTL = 600  # seconds (Google auth codes expire in ~10 min anyway)
 _pending_flows: dict = {}
+
+
+def _prune_pending_flows() -> None:
+    """Drop pending OAuth flows older than the TTL."""
+    now = time.time()
+    expired = [s for s, (_, ts) in _pending_flows.items() if now - ts > _PENDING_FLOW_TTL]
+    for s in expired:
+        _pending_flows.pop(s, None)
+        logger.info("Pruned expired OAuth flow (state=%s)", s[:8])
 
 
 @router.get("/auth/callback")
 async def auth_callback(state: str = Query(...), code: str = Query(...)):
     """Handle the OAuth2 callback from Google."""
-    flow = _pending_flows.pop(state, None)
-    if flow is None:
+    entry = _pending_flows.pop(state, None)
+    if entry is None:
         raise HTTPException(status_code=400, detail="Unknown or expired state token")
+    flow = entry[0]
 
     flow.redirect_uri = "http://localhost:8742/drive/auth/callback"
     try:
@@ -780,16 +797,12 @@ def _find_comment_files(files: list[dict]) -> list[dict]:
         # Skip the manuscript itself
         if any(kw in name_lower for kw in ("manuscript", "paper", "draft", "article")):
             continue
-        # Match comment keywords
+        # Match comment keywords, but only on file types we can actually parse
+        # as comments. (An earlier second loop here appended keyword-named files
+        # of ANY type — .zip, .png, .pdf — which then failed silently in
+        # load_context's comment extractor.)
         if any(kw in name_lower for kw in comment_keywords):
             if f["mimeType"] in comment_types or name_lower.endswith((".txt", ".md")):
-                results.append(f)
-
-    # Also include files named like "reviewer_comments.txt", "R1_feedback.md", etc.
-    for f in files:
-        if f not in results:
-            name_lower = f["name"].lower()
-            if any(kw in name_lower for kw in comment_keywords):
                 results.append(f)
 
     return results

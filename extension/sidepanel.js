@@ -177,7 +177,7 @@ async function showProviderInfo() {
     if (res.ok) {
       const data = await res.json();
       if (data.current && data.current.configured) {
-        dom.contextHint.innerHTML = `🧠 <strong>${data.current.provider}</strong> / ${data.current.model}`;
+        dom.contextHint.innerHTML = `🧠 <strong>${escHtml(data.current.provider)}</strong> / ${escHtml(data.current.model)}`;
         dom.contextHint.classList.remove("hidden");
       }
     }
@@ -263,7 +263,7 @@ async function saveSettings() {
       dom.cfgStatus.className = "";
       // Update the context hint
       if (data.current) {
-        dom.contextHint.innerHTML = `🧠 <strong>${data.current.provider}</strong> / ${data.current.model}`;
+        dom.contextHint.innerHTML = `🧠 <strong>${escHtml(data.current.provider)}</strong> / ${escHtml(data.current.model)}`;
         dom.contextHint.classList.remove("hidden");
       }
       // Clear the API key field for security
@@ -431,19 +431,28 @@ async function loadProject() {
       showSystemMessage(`⚠️ Context loading warning: ${e.message}`);
     }
 
-    // Verify what was loaded into the chat context
-    const ctxRes = await fetch(`${SERVER_URL}/chat/context`);
-    const ctxData = await ctxRes.json();
+    // Verify what was loaded into the chat context (informational — guard
+    // every field so an unexpected payload can't abort loadProject's success
+    // path with a misleading error).
+    try {
+      const ctxRes = await fetch(`${SERVER_URL}/chat/context`);
+      const ctxData = ctxRes.ok ? await ctxRes.json().catch(() => null) : null;
 
-    if (ctxData.loaded) {
-      showSystemMessage(
-        `✅ **Ready**\n\n` +
-        `Paper: ${ctxData.paper.title || "Untitled"}\n` +
-        `Sections: ${ctxData.paper.sections.join(", ")}\n` +
-        `Figures: ${ctxData.paper.figures.length}\n\n` +
-        `You can now ask me anything about your project.`
-      );
-      dom.projectName.textContent = ctxData.paper.title || folder_name;
+      if (ctxData && ctxData.loaded && ctxData.paper) {
+        const paper = ctxData.paper;
+        const sections = Array.isArray(paper.sections) ? paper.sections : [];
+        const figures = Array.isArray(paper.figures) ? paper.figures : [];
+        showSystemMessage(
+          `✅ **Ready**\n\n` +
+          `Paper: ${paper.title || "Untitled"}\n` +
+          `Sections: ${sections.join(", ")}\n` +
+          `Figures: ${figures.length}\n\n` +
+          `You can now ask me anything about your project.`
+        );
+        dom.projectName.textContent = paper.title || folder_name;
+      }
+    } catch (e) {
+      // Non-fatal — context verification only.
     }
 
     projectLoaded = true;
@@ -682,8 +691,12 @@ function showOnboardingOptions() {
 function renderMarkdown(text) {
   if (!text) return "";
 
-  // Basic markdown rendering
-  let html = text
+  // Escape HTML-special chars FIRST so LLM output / scraped titles / folder
+  // names can't inject live HTML (e.g. <img onerror=...>, <script>). The
+  // markdown substitutions below only insert a fixed set of known-safe tags,
+  // and the markdown sigils (*, `, #, -) are not HTML-special so they still
+  // match after escaping.
+  let html = escHtml(text)
     // Bold
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     // Italic

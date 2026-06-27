@@ -62,8 +62,10 @@
     </div>
   </div>
 
-  <!-- Connection Banner (shown when not connected) -->
-  <div id="connect-banner" class="banner">
+  <!-- Connection Banner (shown when not connected). Starts hidden so it
+       doesn't flash before the first health check resolves; setServerStatus
+       reveals it on "disconnected" and hides it on "connected". -->
+  <div id="connect-banner" class="banner" style="display: none;">
     <p><strong>⚠️ Backend server not running</strong></p>
     <p>The assistant needs a local server to work.</p>
     <p class="hint">If you've already set up the background service, the server should

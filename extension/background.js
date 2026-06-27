@@ -46,10 +46,6 @@ chrome.runtime.onConnect.addListener((port) => {
   if (port.name === "sidepanel") {
     activePort = port;
 
-    port.onDisconnect.addListener(() => {
-      activePort = null;
-    });
-
     // Proactively push tab changes as they happen
     const pushCurrentTab = () => {
       if (!activePort) return;
@@ -64,15 +60,21 @@ chrome.runtime.onConnect.addListener((port) => {
       });
     };
 
-    chrome.tabs.onActivated.addListener(pushCurrentTab);
-    chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+    // Named handler so we can remove the exact same reference on disconnect.
+    // (A previously anonymous arrow here was never removed -> it accumulated
+    // on every reconnect and pushCurrentTab fired N times per tab change.)
+    const onTabUpdated = (tabId, changeInfo) => {
       if (changeInfo.url || changeInfo.title) pushCurrentTab();
-    });
+    };
+
+    chrome.tabs.onActivated.addListener(pushCurrentTab);
+    chrome.tabs.onUpdated.addListener(onTabUpdated);
 
     // Clean up listeners when the port disconnects
     port.onDisconnect.addListener(() => {
+      activePort = null;
       chrome.tabs.onActivated.removeListener(pushCurrentTab);
-      chrome.tabs.onUpdated.removeListener(pushCurrentTab);
+      chrome.tabs.onUpdated.removeListener(onTabUpdated);
     });
   }
 });

@@ -49,8 +49,11 @@ _scraped_sources: list[str] = []  # URLs, parallel to _scraped_docs
 # Focused file cache — file_id → parsed text content
 _focused_file_cache: dict[str, str] = {}
 
-# Project file index — file name (lowercase) → file_id, for name-based lookups
-_project_file_index: dict[str, str] = {}
+# Project file index — file name (lowercase) → list of {id, name} entries,
+# for name-based lookups. A list (not a single id) so that duplicate basenames
+# in different subfolders (e.g. subA/notes.txt, subB/notes.txt) don't
+# overwrite each other; the consumer disambiguates.
+_project_file_index: dict[str, list[dict]] = {}
 
 
 def set_project_file_index(files: list[dict]) -> None:
@@ -65,12 +68,13 @@ def set_project_file_index(files: list[dict]) -> None:
         fid = f.get("id")
         name = f.get("name", "")
         if fid and name:
+            entry = {"id": fid, "name": name}
             # Index both the full name and just the filename (strip path)
             full = name.lower()
             basename = name.rsplit("/", 1)[-1].lower() if "/" in name else full
-            _project_file_index[full] = fid
+            _project_file_index.setdefault(full, []).append(entry)
             if basename != full:
-                _project_file_index[basename] = fid
+                _project_file_index.setdefault(basename, []).append(entry)
 
 
 def set_project_context(
@@ -358,15 +362,33 @@ def _should_focus_file(message: str, current_file: dict | None) -> tuple[str | N
     if current_file and current_file.get("id"):
         return current_file["id"], current_file.get("name", "unknown")
 
-    # Case 2: user mentioned a project file by name
+    # Case 2: user mentioned a project file by name. Gather every matching key
+    # and pick the LONGEST one — a full path (e.g. "subb/notes.txt") is more
+    # specific than a bare basename ("notes.txt") and should win, otherwise a
+    # duplicate basename in another subfolder could shadow the intended file.
     global _project_file_index
-    for fname_lower, fid in _project_file_index.items():
-        # Check if the file name (or its basename without extension) appears in the message
+    best_key = None
+    best_entries = None
+    for fname_lower, entries in _project_file_index.items():
         basename = fname_lower.rsplit(".", 1)[0] if "." in fname_lower else fname_lower
         if fname_lower in msg_lower or basename in msg_lower:
-            logger.info("Focus file: matched '%s' in message, file_id=%s", fname_lower, fid)
-            # Find the original cased name
-            return fid, fname_lower
+            if best_key is None or len(fname_lower) > len(best_key):
+                best_key = fname_lower
+                best_entries = entries
+
+    if best_entries is not None:
+        entry = best_entries[0]
+        if len(best_entries) > 1:
+            # Duplicate basenames across subfolders — pick the first and warn;
+            # the user can disambiguate by naming the full path.
+            logger.warning(
+                "Focus file: '%s' matches %d files; using the first (id=%s). "
+                "Specify the full path to pick a different one.",
+                best_key, len(best_entries), entry["id"],
+            )
+        else:
+            logger.info("Focus file: matched '%s' in message, file_id=%s", best_key, entry["id"])
+        return entry["id"], entry["name"]
 
     return None, None
 
@@ -1262,13 +1284,11 @@ async def scrape_webpage(req: ScrapeRequest):
         logger.info("Scrape: parsing %d chars of HTML for %s", len(req.html), req.url)
         doc = extract_content(req.html, req.url)
     except Exception as exc:
-        logger.error("Scrape HTTP error for %s: %s", req.url, exc)
-        raise HTTPException(
-            status_code=502,
-            detail=f"Could not fetch the page: {exc}",
-        )
-    except Exception as exc:
-        logger.error("Scrape error for %s: %s", req.url, exc)
+        # The extension already fetched the HTML; a failure here is a parsing
+        # error, not a fetch error. (A previous duplicate `except Exception`
+        # here was unreachable and every failure returned a misleading 502
+        # "Could not fetch the page".)
+        logger.error("Scrape: failed to parse page %s: %s", req.url, exc)
         raise HTTPException(
             status_code=500,
             detail=f"Failed to scrape page: {exc}",
