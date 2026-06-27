@@ -67,7 +67,7 @@ check_python() {
 
     # Also check conda base if present
     local conda_python
-    conda_python=$(command -v conda 2>/dev/null)
+    conda_python=$(command -v conda 2>/dev/null || true)
 
     # 1) Versioned binaries first: python3.13, python3.12, python3.11, python3.10
     for dir in $search_dirs; do
@@ -187,7 +187,7 @@ try:
         print('INVALID')
 except:
     print('INVALID')
-" 2>/dev/null)
+" 2>/dev/null || true)
 
         if [ "$EXISTING_ID" != "INVALID" ] && [ -n "$EXISTING_ID" ]; then
             echo -e "${GREEN}✓ Google credentials configured (Client ID: ${EXISTING_ID}…)${NC}"
@@ -347,7 +347,7 @@ except:
 
     if [ -d "$DOWNLOADS" ]; then
         if [ -r "$DOWNLOADS" ]; then
-            CANDIDATES=$(ls -t "$DOWNLOADS"/client_secret*.json 2>/dev/null | head -3)
+            CANDIDATES=$(ls -t "$DOWNLOADS"/client_secret*.json 2>/dev/null | head -3 || true)
             if [ -n "$CANDIDATES" ]; then
                 NEWEST=$(echo "$CANDIDATES" | head -1)
                 echo "found!"
@@ -437,7 +437,7 @@ try:
 except Exception as e:
     print('INVALID:' + str(e))
     sys.exit(1)
-" 2>/dev/null)
+" 2>/dev/null || true)
 
     if [[ "$CLIENT_ID" == INVALID* ]]; then
         echo -e "${RED}✗ Invalid${NC}"

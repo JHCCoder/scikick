@@ -534,8 +534,8 @@ def _clean_error_message(raw: str) -> str:
     # Strip "Error code: NNN - " prefix added by the OpenAI SDK
     cleaned = _re.sub(r"^Error code:\s*\d+\s*[-–—]\s*", "", raw).strip()
 
-    # If it still looks like a raw JSON/dict repr, fall back to a generic message
-    if cleaned.startswith("{") or cleaned.startswith("{"):
+    # If it still looks like a raw JSON/dict or list repr, fall back to a generic message
+    if cleaned.startswith("{") or cleaned.startswith("["):
         return "The API returned an error. See details above."
 
     return cleaned

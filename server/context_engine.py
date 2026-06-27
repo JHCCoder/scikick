@@ -313,10 +313,4 @@ def get_figure_context(
         "image_base64": image_b64,
     }
 
-    # Find reviewer comments mentioning this figure
-    related_comments = []
-    for comment_id, comment_data in image_cache.get("_comments", {}).items():
-        # This is populated externally by the API route
-        pass
-
     return result

@@ -196,10 +196,12 @@ def _extract_metadata(text: str) -> tuple[str, str, str]:
     lines = text.strip().split("\n")
 
     # Title: first substantial line
-    for line in lines[:20]:
+    title_idx = -1
+    for i, line in enumerate(lines[:20]):
         stripped = line.strip()
         if len(stripped) > 10 and not stripped.startswith(("#", "http", "©", "Correspondence")):
             title = stripped
+            title_idx = i
             break
 
     # Abstract: between "Abstract" and the next section header
@@ -209,6 +211,31 @@ def _extract_metadata(text: str) -> tuple[str, str, str]:
     )
     if abs_match:
         abstract = abs_match.group(1).strip()[:2000]
+
+    # Authors: scan the few lines after the title for a plausible author list.
+    # Conservative — only set when a line looks like comma/and-separated names
+    # and not an affiliation or a sentence; otherwise leave empty rather than
+    # risk populating garbage.
+    if title_idx >= 0:
+        affiliation_tokens = ("university", "department", "institute", "laborator",
+                              "@", "http", "corresponding", "©", "email")
+        for line in lines[title_idx + 1: title_idx + 9]:
+            stripped = line.strip()
+            if not (10 <= len(stripped) <= 200):
+                continue
+            low = stripped.lower()
+            if stripped.startswith(("#", "http", "©")):
+                continue
+            if "," not in stripped and not re.search(r"\band\b", low):
+                continue
+            if stripped.endswith(".") or any(tok in low for tok in affiliation_tokens):
+                continue
+            # Strip affiliation superscript markers (digits, *, †, ‡, §)
+            authors = re.sub(r"[\d\*†‡§]+", "", stripped)
+            authors = re.sub(r",\s*,", ",", authors)
+            authors = re.sub(r"\s*,\s*", ", ", authors)
+            authors = re.sub(r"\s{2,}", " ", authors).strip(" ,")
+            break
 
     return title, abstract, authors
 

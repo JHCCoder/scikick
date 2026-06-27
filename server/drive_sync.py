@@ -416,7 +416,7 @@ async def _run_in_thread(fn, *args, **kwargs):
 
 
 async def _save_memory_to_drive(folder_id: str, memory: dict) -> None:
-    """Save a memory dict as .revision-memory.json in the Drive folder.
+    """Save a memory dict as .scikick_memory.json in the Drive folder.
 
     Runs blocking Google API calls in a thread pool so the event loop stays
     responsive for health checks and other requests while the Drive upload
@@ -453,7 +453,7 @@ async def _save_memory_to_drive(folder_id: str, memory: dict) -> None:
         await _run_in_thread(
             service.files().update(fileId=existing[0]["id"], media_body=upload).execute,
         )
-        logger.info("Updated .revision-memory.json in Drive folder %s", folder_id)
+        logger.info("Updated .scikick_memory.json in Drive folder %s", folder_id)
     else:
         file_metadata = {
             "name": MEMORY_FILE_NAME,
@@ -463,12 +463,12 @@ async def _save_memory_to_drive(folder_id: str, memory: dict) -> None:
         await _run_in_thread(
             service.files().create(body=file_metadata, media_body=upload).execute,
         )
-        logger.info("Created .revision-memory.json in Drive folder %s", folder_id)
+        logger.info("Created .scikick_memory.json in Drive folder %s", folder_id)
 
 
 @router.post("/folder/{folder_id}/memory")
 async def save_memory_file(folder_id: str, memory: dict):
-    """Save .revision-memory.json to the Drive folder."""
+    """Save .scikick_memory.json to the Drive folder."""
     try:
         await _save_memory_to_drive(folder_id, memory)
     except RuntimeError as exc:
